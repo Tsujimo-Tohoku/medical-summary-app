@@ -420,7 +420,8 @@ export default function Home() {
           <div className="flex justify-center gap-6 mb-4">
             <a href="/privacy" className="hover:text-blue-600 transition">Privacy</a>
             <a href="#" className="hover:text-blue-600 transition">Terms</a>
-            <a href="#" className="hover:text-blue-600 transition">Contact</a>
+            {/* ★修正: お問い合わせリンクを /about に変更 */}
+            <a href="/about" className="hover:text-blue-600 transition">Contact / About</a>
           </div>
           <p>© 2025 Medical Summary Assistant.</p>
         </div>
