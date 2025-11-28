@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # --- PDF用ライブラリ ---
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont # ★ここが変わっています
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import mm
@@ -21,7 +21,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
 
-# 2. CORS設定（すべて許可）
+# 2. CORS設定
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,32 +30,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. フォントの登録（サーバー起動時に1回だけやる）
-# 同じフォルダにある ipaexg.ttf を探す
+# 3. フォント登録
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     font_path = os.path.join(current_dir, "ipaexg.ttf")
     pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
-    print(f"Font loaded: {font_path}")
-except Exception as e:
-    print(f"Font Error: {e}")
-    # フォントがない場合のエラー回避（最悪英語で動くようにする）
+except Exception:
     pass
 
-# 4. モデル設定
+# 4. モデル設定（多言語対応の指示を追加）
 system_instruction = """
-あなたは医療秘書AIです。患者の訴えを医師提示用に整理してください。
-診断は行わず、事実の整理に徹してください。
+あなたは医療秘書AIです。
+ユーザーの入力した症状（あらゆる言語）を分析し、日本の医師に提示するための「日本語の医療サマリー」を作成してください。
+また、ユーザーの安心のために、指定された「ユーザーの母国語」での要約も併記してください。
+診断行為は行わず、情報の整理に徹してください。
 """
 model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_instruction)
 
+# ★変更：言語指定を受け取れるようにする
 class UserRequest(BaseModel):
     text: str
+    language: str = "Japanese" # デフォルトは日本語
 
 @app.post("/analyze")
 async def analyze_symptoms(request: UserRequest):
     try:
-        prompt = f"以下の患者の訴えを医師提示用にサマリーしてください。\n対象テキスト:\n{request.text}"
+        # プロンプトを強化
+        prompt = f"""
+        以下の患者の訴えを分析し、以下のフォーマットで出力してください。
+        
+        対象テキスト:
+        {request.text}
+        
+        ユーザーの使用言語: {request.language}
+
+        【出力フォーマット】
+        1. **【医師提示用サマリー】 (日本語)**
+           - 医師が短時間で理解できる専門的な表現（箇条書き）
+           
+        2. **【患者確認用】 ({request.language}で記述)**
+           - AIがどのように理解したかをユーザーに伝えるための簡単な説明
+        """
+        
         response = model.generate_content(prompt)
         return {"result": response.text}
     except Exception as e:
@@ -66,7 +82,6 @@ async def analyze_symptoms(request: UserRequest):
 async def create_pdf(request: UserRequest):
     try:
         buffer = io.BytesIO()
-        
         doc = SimpleDocTemplate(
             buffer, 
             pagesize=A4,
@@ -74,10 +89,7 @@ async def create_pdf(request: UserRequest):
             topMargin=20*mm, bottomMargin=20*mm
         )
 
-        # スタイル設定
         styles = getSampleStyleSheet()
-        
-        # フォントが読み込めていれば日本語フォントを使う
         font_name = 'IPAexGothic' if 'IPAexGothic' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
         
         jp_style = ParagraphStyle(
@@ -99,40 +111,26 @@ async def create_pdf(request: UserRequest):
         )
 
         story = []
-        
-        # タイトル
-        story.append(Paragraph("医師提示用サマリー", title_style))
+        story.append(Paragraph("Medical Summary / 医師提示用サマリー", title_style))
         story.append(Spacer(1, 5*mm))
         
-        # 本文の処理
         lines = request.text.split('\n')
         for line in lines:
-            if not line.strip():
-                continue
-            
+            if not line.strip(): continue
             clean_line = line.replace("**", "")
-            
-            if line.strip().startswith("■") or line.strip().startswith("##"):
+            if line.strip().startswith("■") or line.strip().startswith("##") or line.strip().startswith("【"):
                 story.append(Spacer(1, 3*mm))
                 story.append(Paragraph(f"<font size=12><b>{clean_line}</b></font>", jp_style))
             else:
                 story.append(Paragraph(clean_line, jp_style))
-            
             story.append(Spacer(1, 2*mm))
 
         doc.build(story)
         buffer.seek(0)
-        
         return StreamingResponse(
             buffer, 
             media_type="application/pdf",
             headers={"Content-Disposition": "attachment; filename=summary.pdf"}
         )
-
     except Exception as e:
-        print(f"PDF Logic Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/")
-def read_root():
-    return {"message": "AI Medical Server is Running!"}
