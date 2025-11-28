@@ -133,6 +133,34 @@ useEffect(() => {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* ▼▼▼ 追加：使い方ガイド（ここから） ▼▼▼ */}
+        <div className="mb-8">
+          <details className="group bg-white border border-blue-100 rounded-xl shadow-sm open:shadow-md transition-all duration-200">
+            <summary className="flex items-center justify-between p-4 cursor-pointer list-none text-slate-700 font-bold select-none">
+              <span className="flex items-center gap-2">
+                <span className="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">?</span>
+                このツールの使い方は？
+              </span>
+              <span className="transition-transform group-open:rotate-180 text-slate-400">▼</span>
+            </summary>
+            <div className="px-4 pb-6 pt-2 border-t border-slate-50 text-sm text-slate-600 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">STEP 1</span>
+                <p>下の入力欄に、今の症状や辛いことを自由に書いてください。（箇条書きでも、話し言葉でもOKです）</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">STEP 2</span>
+                <p>「医師に見せる画面を作成」ボタンを押して、数秒待ちます。</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">STEP 3</span>
+                <p>整理された「医師提示用サマリー」が表示されます。そのまま医師に画面を見せるか、コピーしてWeb問診票に貼り付けてください。</p>
+              </div>
+            </div>
+          </details>
+        </div>
+        {/* ▲▲▲ 追加：使い方ガイド（ここまで） ▲▲▲ */}
+        
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
           <textarea
             className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 text-base"
