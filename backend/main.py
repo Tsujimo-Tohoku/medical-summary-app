@@ -1,179 +1,172 @@
-"use client";
+import os
+import io
+import re
+import json
+import google.generativeai as genai
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
-import { useState } from "react";
+# --- PDF用ライブラリ ---
+from reportlab.lib.pagesizes import A4, B5
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import mm
 
-// ▼ 太字(**文字**)をHTMLの太字に変換する表示用パーツ
-const FormattedText = ({ text }: { text: string }) => {
-  if (!text) return null;
-  // 改行で分割
-  return (
-    <div className="whitespace-pre-wrap leading-relaxed">
-      {text.split('\n').map((line, i) => (
-        <p key={i} className="min-h-[1em]">
-          {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={j} className="text-blue-900 font-bold bg-blue-50 px-1 rounded">{part.slice(2, -2)}</strong>;
-            }
-            return part;
-          })}
-        </p>
-      ))}
-    </div>
-  );
-};
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-const DICT = {
-  ja: { label: "日本語", button: "医師に見せる画面を作成", loading: "AIがカルテを作成中...", copy: "サマリーをコピー", copied: "コピーしました！", pdf: "PDFで保存", explanationTitle: "患者様への確認メモ" },
-  en: { label: "English", button: "Create Medical Summary", loading: "AI is thinking...", copy: "Copy Summary", copied: "Copied!", pdf: "Save as PDF", explanationTitle: "Note for you" },
-  zh: { label: "中文", button: "生成病历摘要", loading: "AI正在思考...", copy: "复制摘要", copied: "已复制！", pdf: "保存PDF", explanationTitle: "给您的确认" },
-  vi: { label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang suy nghĩ...", copy: "Sao chép", copied: "Đã sao chép!", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn" },
-};
+app = FastAPI()
 
-type LangKey = keyof typeof DICT;
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-export default function Home() {
-  const [lang, setLang] = useState<LangKey>("ja");
-  const [inputText, setInputText] = useState("");
-  
-  // 結果をオブジェクトで管理（summary:医師用, explanation:患者用）
-  const [result, setResult] = useState<{summary: string, explanation: string} | null>(null);
-  
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
-  const t = DICT[lang];
+try:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    font_path = os.path.join(current_dir, "ipaexg.ttf")
+    pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
+except Exception:
+    pass
 
-  const handleAnalyze = async () => {
-    if (!inputText) return;
-    setIsLoading(true);
-    setResult(null);
+system_instruction = """
+あなたは医療秘書AIです。
+ユーザーの入力した症状を分析し、JSON形式でデータを出力してください。
+"""
+model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_instruction)
 
-    try {
-      const response = await fetch("https://medical-backend-92rr.onrender.com/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: inputText, language: t.label }),
-      });
-      // JSONとして受け取る
-      const data = await response.json();
-      setResult(data); 
-    } catch (error) {
-      console.error(error);
-      alert("Error / エラーが発生しました");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+class UserRequest(BaseModel):
+    text: str
+    language: str = "Japanese"
+    pdf_size: str = "A4" # ★追加：PDFサイズ指定
 
-  const handleDownloadPDF = async () => {
-    if (!result) return;
-    try {
-      // PDFには医師用サマリーだけを送る
-      const response = await fetch("https://medical-backend-92rr.onrender.com/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: result.summary }), 
-      });
-      if (!response.ok) throw new Error("PDF Error");
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "medical_summary.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (error) {
-      alert("PDF Error");
-    }
-  };
+@app.post("/analyze")
+async def analyze_symptoms(request: UserRequest):
+    try:
+        explanation_instruction = ""
+        if request.language != "Japanese" and request.language != "日本語":
+             explanation_instruction = f"2. `explanation`: ユーザーへの説明を{request.language}で記述（AIの理解を伝えるため）。"
+        else:
+             explanation_instruction = "2. `explanation`: 空文字（\"\"）にしてください（日本語ユーザーには説明不要なため）。"
 
-  const handleCopy = () => {
-    if (!result) return;
-    // 医師用サマリーだけをコピー
-    navigator.clipboard.writeText(result.summary);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
+        prompt = f"""
+        以下の患者の訴えを分析し、以下のJSONフォーマットのみを出力してください。Markdown記法は含めないでください。
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-32">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">AI</div>
-            <h1 className="text-lg font-bold text-slate-800 hidden md:block">Medical Summary</h1>
-          </div>
-          <select 
-            className="bg-slate-100 border border-slate-300 text-slate-700 text-sm rounded-lg p-2"
-            value={lang} onChange={(e) => setLang(e.target.value as LangKey)}
-          >
-            <option value="ja">🇯🇵 日本語</option>
-            <option value="en">🇺🇸 English</option>
-            <option value="zh">🇨🇳 中文</option>
-            <option value="vi">🇻🇳 Tiếng Việt</option>
-          </select>
-        </div>
-      </header>
+        対象テキスト:
+        {request.text}
+        
+        ユーザーの使用言語: {request.language}
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-          <textarea
-            className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 text-base"
-            placeholder={lang === 'ja' ? "（例）昨日の夜からお腹が痛い..." : "(Ex) I have a stomach ache..."}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-          />
-          <button
-            onClick={handleAnalyze} disabled={isLoading || !inputText}
-            className={`mt-4 w-full py-4 px-6 rounded-xl font-bold text-white text-lg shadow-lg flex items-center justify-center gap-2 transition-all ${isLoading || !inputText ? "bg-slate-300" : "bg-blue-600 hover:bg-blue-700"}`}
-          >
-            {isLoading ? t.loading : `✨ ${t.button}`}
-          </button>
-        </div>
+        【出力JSONキー】
+        1. `summary`: 医師提示用サマリー（日本語）。医師が読みやすい箇条書きスタイル。Markdownの太字(**)を使用して重要な部分を強調すること。
+        {explanation_instruction}
 
-        {/* 結果表示エリア */}
-        {result && (
-          <div className="animate-fade-in-up space-y-6">
+        Example JSON:
+        {{
+            "summary": "・主訴：腹痛\\n・詳細：昨夜から...",
+            "explanation": "I understood that you have a stomach ache..."
+        }}
+        """
+        
+        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
+
+    except Exception as e:
+        print(f"Analyze Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/pdf")
+async def create_pdf(request: UserRequest):
+    try:
+        buffer = io.BytesIO()
+        
+        # ★追加：用紙サイズの分岐処理
+        # デフォルトはA4
+        pagesize = A4
+        right_margin = 20*mm
+        
+        if request.pdf_size == "B5":
+            pagesize = B5
+        elif request.pdf_size == "Receipt":
+            # レシートは幅80mm、高さは十分長く(300mm)設定
+            pagesize = (80*mm, 300*mm)
+            right_margin = 5*mm # レシートは余白を狭くする
+
+        # マージン設定（レシートの場合は狭く）
+        margin = 5*mm if request.pdf_size == "Receipt" else 20*mm
+
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=pagesize, 
+            rightMargin=margin, leftMargin=margin, 
+            topMargin=margin, bottomMargin=margin
+        )
+
+        styles = getSampleStyleSheet()
+        font_name = 'IPAexGothic' if 'IPAexGothic' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
+        
+        # レシートの場合は文字サイズを少し小さく
+        base_font_size = 9 if request.pdf_size == "Receipt" else 10
+        title_font_size = 14 if request.pdf_size == "Receipt" else 18
+
+        jp_style = ParagraphStyle(
+            name='Japanese', 
+            parent=styles['Normal'], 
+            fontName=font_name, 
+            fontSize=base_font_size, 
+            leading=base_font_size * 1.6
+        )
+        
+        title_style = ParagraphStyle(
+            name='Title', 
+            parent=styles['Heading1'], 
+            fontName=font_name, 
+            fontSize=title_font_size, 
+            leading=title_font_size * 1.4, 
+            alignment=1, 
+            spaceAfter=5*mm
+        )
+
+        story = []
+        # タイトルもサイズによって変える
+        title_text = "Medical Summary" if request.pdf_size == "Receipt" else "Medical Summary / 医師提示用サマリー"
+        story.append(Paragraph(title_text, title_style))
+        story.append(Spacer(1, 5*mm))
+        
+        lines = request.text.split('\n')
+        for line in lines:
+            if not line.strip(): continue
             
-            {/* 1. 医師提示用サマリー（全員に表示） */}
-            <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden">
-              <div className="bg-blue-50 px-6 py-4 border-b border-blue-100 flex items-center justify-between">
-                <h3 className="font-bold text-blue-800">✅ 医師提示用 / Medical Summary</h3>
-                <button onClick={handleCopy} className="text-xs bg-white border border-blue-200 px-3 py-1.5 rounded-lg text-blue-600 font-bold hover:bg-blue-50 transition">
-                  {isCopied ? t.copied : t.copy}
-                </button>
-              </div>
-              <div className="p-6 text-slate-800">
-                {/* ここで太字変換コンポーネントを使う */}
-                <FormattedText text={result.summary} />
-              </div>
-              <div className="bg-slate-50 px-6 py-4 border-t border-slate-100">
-                <button onClick={handleDownloadPDF} className="w-full py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-lg shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
-                  📄 {t.pdf}
-                </button>
-              </div>
-            </div>
-
-            {/* 2. 患者確認用メモ（日本語以外の場合のみ表示） */}
-            {result.explanation && (
-              <div className="bg-amber-50 rounded-xl border border-amber-200 p-6">
-                <h3 className="font-bold text-amber-800 mb-2">💡 {t.explanationTitle}</h3>
-                <p className="text-amber-900 text-sm leading-relaxed whitespace-pre-wrap">
-                  {result.explanation}
-                </p>
-              </div>
-            )}
+            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             
-          </div>
-        )}
-      </main>
-      
-      {/* 広告スペース */}
-      <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-sm border-t border-slate-200 p-2 z-50 flex justify-center">
-        <div className="w-[320px] h-[50px] bg-slate-100 flex items-center justify-center text-xs text-slate-400 rounded border border-slate-200">
-          Ads Area
-        </div>
-      </div>
-    </div>
-  );
-}
+            if line.strip().startswith("■") or line.strip().startswith("##") or line.strip().startswith("【"):
+                clean_text = formatted_line.replace("##", "").replace("■", "").strip()
+                story.append(Spacer(1, 2*mm))
+                # 見出しのサイズ調整
+                header_size = base_font_size + 2
+                story.append(Paragraph(f"<font size={header_size}><b>{clean_text}</b></font>", jp_style))
+            elif line.strip().startswith("* ") or line.strip().startswith("- "):
+                clean_text = formatted_line.strip()[2:]
+                story.append(Paragraph(f"• {clean_text}", jp_style))
+            else:
+                story.append(Paragraph(formatted_line, jp_style))
+            
+            story.append(Spacer(1, 1*mm))
+
+        doc.build(story)
+        buffer.seek(0)
+        return StreamingResponse(
+            buffer, 
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=summary.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
