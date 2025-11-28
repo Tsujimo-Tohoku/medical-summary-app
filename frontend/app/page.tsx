@@ -1,25 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-
-// ▼ 太字表示用コンポーネント
-const FormattedText = ({ text }: { text: string }) => {
-  if (!text) return null;
-  return (
-    <div className="whitespace-pre-wrap leading-relaxed">
-      {text.split('\n').map((line, i) => (
-        <p key={i} className="min-h-[1em] mb-1">
-          {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={j} className="text-blue-700 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/50 px-1 rounded">{part.slice(2, -2)}</strong>;
-            }
-            return part;
-          })}
-        </p>
-      ))}
-    </div>
-  );
-};
+import { Metadata } from 'next';
 
 const DICT = {
   ja: { 
@@ -30,8 +12,8 @@ const DICT = {
     step3: "整理されたサマリーが表示されます。そのまま医師に見せるか、Web問診票にコピーしてください。",
     settings: { title: "設定", lang: "言語", appearance: "表示設定", fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ" },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
-    recStart: "音声入力", recStop: "停止",
-    recommend: "おすすめの診療科"
+    recommend: "おすすめの診療科",
+    headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" }
   },
   en: { 
     label: "English", button: "Create Medical Summary", loading: "AI is thinking...", copy: "Copy", copied: "Copied", share: "Share", pdf: "Save as PDF", explanationTitle: "Note for you",
@@ -41,8 +23,8 @@ const DICT = {
     step3: "Show the summary to your doctor.",
     settings: { title: "Settings", lang: "Language", appearance: "Appearance", fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size" },
     placeholder: "(Ex) I have a throbbing pain in my right stomach since last night...",
-    recStart: "Voice", recStop: "Stop",
-    recommend: "Recommended Departments"
+    recommend: "Recommended Departments",
+    headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" }
   },
   zh: { 
     label: "中文", button: "生成病历摘要", loading: "AI正在思考...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认",
@@ -52,8 +34,8 @@ const DICT = {
     step3: "向医生展示摘要。",
     settings: { title: "设置", lang: "语言", appearance: "外观", fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸" },
     placeholder: "（例）从昨天晚上开始右腹部疼痛...",
-    recStart: "语音", recStop: "停止",
-    recommend: "推荐科室"
+    recommend: "推荐科室",
+    headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" }
   },
   vi: { 
     label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang suy nghĩ...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn",
@@ -63,8 +45,8 @@ const DICT = {
     step3: "Đưa bản tóm tắt cho bác sĩ.",
     settings: { title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF" },
     placeholder: "(Ví dụ) Tôi bị đau bụng bên phải từ tối qua...",
-    recStart: "Nói", recStop: "Dừng",
-    recommend: "Khoa đề xuất"
+    recommend: "Khoa đề xuất",
+    headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" }
   },
 };
 
@@ -73,12 +55,34 @@ type Theme = 'light' | 'dark';
 type FontSize = 'small' | 'medium' | 'large';
 type PdfSize = 'A4' | 'B5' | 'Receipt';
 
-// 結果データの型定義
+// 構造化データの型定義
+interface SummaryData {
+  chief_complaint: string;
+  history: string;
+  symptoms: string;
+  background: string;
+}
+
 interface AnalysisResult {
-  summary: string;
-  departments?: string[]; // 診療科（ない場合もあるので?）
+  summary: SummaryData; // ここが構造化された
+  departments?: string[];
   explanation?: string;
 }
+
+// ▼ 太字コンポーネント（シンプル化）
+const FormattedText = ({ text, className }: { text: string, className?: string }) => {
+  if (!text) return null;
+  return (
+    <p className={`whitespace-pre-wrap leading-relaxed ${className}`}>
+      {text.split(/(\*\*.*?\*\*)/).map((part, j) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={j} className="text-blue-700 dark:text-blue-300 font-bold">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      })}
+    </p>
+  );
+};
 
 export default function Home() {
   const [lang, setLang] = useState<LangKey>("ja");
@@ -93,9 +97,8 @@ export default function Home() {
   const [isCopied, setIsCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
   
-  // 音声入力用ステート
   const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<any>(null); // 型定義回避のためany
+  const recognitionRef = useRef<any>(null);
   
   const settingsRef = useRef<HTMLDivElement>(null);
   const t = DICT[lang];
@@ -113,25 +116,21 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 音声入力のセットアップと制御
   const toggleRecording = useCallback(() => {
     if (isRecording) {
       if (recognitionRef.current) recognitionRef.current.stop();
       setIsRecording(false);
       return;
     }
-
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("お使いのブラウザは音声入力に対応していません / Voice input not supported");
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.lang = lang === 'ja' ? 'ja-JP' : lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'vi-VN';
-    recognition.interimResults = true; // 途中経過も取得
-    recognition.continuous = true;     // 連続認識
-
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -143,22 +142,14 @@ export default function Home() {
         setInputText(prev => prev + (prev ? '\n' : '') + finalTranscript);
       }
     };
-
     recognition.onerror = (event: any) => {
       console.error(event.error);
       setIsRecording(false);
     };
-
-    recognition.onend = () => {
-      // 自動で止まった場合などはステートを戻す（手動停止以外）
-      // setIsRecording(false); 
-    };
-
     recognitionRef.current = recognition;
     recognition.start();
     setIsRecording(true);
   }, [isRecording, lang]);
-
 
   const getTextSizeClass = () => {
     switch(fontSize) {
@@ -172,13 +163,10 @@ export default function Home() {
     if (!inputText) return;
     setIsLoading(true);
     setResult(null);
-
-    // 録音中なら止める
     if (isRecording && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsRecording(false);
     }
-
     try {
       const response = await fetch("https://medical-backend-92rr.onrender.com/analyze", {
         method: "POST",
@@ -195,13 +183,19 @@ export default function Home() {
     }
   };
 
+  // 表示用にテキストを結合して作成する関数（コピーやPDF用）
+  const createFormattedSummaryText = (summary: SummaryData) => {
+    return `■ ${t.headers.cc}\n${summary.chief_complaint}\n\n■ ${t.headers.history}\n${summary.history}\n\n■ ${t.headers.symptoms}\n${summary.symptoms}\n\n■ ${t.headers.background}\n${summary.background}`;
+  };
+
   const handleDownloadPDF = async () => {
     if (!result) return;
     try {
+      const fullText = createFormattedSummaryText(result.summary);
       const response = await fetch("https://medical-backend-92rr.onrender.com/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: result.summary, pdf_size: pdfSize }), 
+        body: JSON.stringify({ text: fullText, pdf_size: pdfSize }), 
       });
       if (!response.ok) throw new Error("PDF Error");
       const blob = await response.blob();
@@ -219,7 +213,10 @@ export default function Home() {
 
   const handleCopy = () => {
     if (!result) return;
-    navigator.clipboard.writeText(result.summary);
+    // クリップボードにはマークダウン記号を除去したプレーンテキストを入れたほうが親切かもしれないが、
+    // ここでは強調情報を残すためそのままにするか、整形するか選べる。今回は整形済みテキストをコピー。
+    const textToCopy = createFormattedSummaryText(result.summary).replace(/\*\*/g, ""); 
+    navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -229,7 +226,7 @@ export default function Home() {
     try {
       await (navigator as any).share({
         title: 'Medical Summary',
-        text: result.summary,
+        text: createFormattedSummaryText(result.summary).replace(/\*\*/g, ""),
       });
     } catch (err) {
       console.log(err);
@@ -241,13 +238,27 @@ export default function Home() {
   const inputClass = `w-full h-48 p-4 rounded-xl outline-none resize-none transition-all ${getTextSizeClass()} ${theme === 'dark' ? 'bg-slate-900 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-blue-500' : 'bg-slate-50 border border-slate-200 text-slate-700 focus:ring-2 focus:ring-blue-500'}`;
   const headerClass = `border-b sticky top-0 z-10 shadow-sm transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`;
 
+  // サマリー表示用のセクションコンポーネント
+  const SummarySection = ({ title, content }: { title: string, content: string }) => (
+    <div className="mb-6 last:mb-0">
+      <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2 border-l-4 border-blue-500 pl-2">
+        {title}
+      </h4>
+      <div className={`pl-3 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+        <FormattedText text={content} />
+      </div>
+    </div>
+  );
+
   return (
     <div className={mainClass}>
       <header className={headerClass}>
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">AI</div>
-            <h1 className="text-lg font-bold">Medical Summary</h1>
+            <h1 className="text-xl font-bold tracking-tight">
+              Medical Summary <span className="text-blue-600 dark:text-blue-400">Assistant</span>
+            </h1>
           </div>
           
           <div className="relative" ref={settingsRef}>
@@ -332,20 +343,13 @@ export default function Home() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
           />
-          {/* マイクボタン */}
           <button 
             onClick={toggleRecording}
             className={`absolute bottom-24 right-8 p-3 rounded-full shadow-lg transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
             title="音声入力"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-              <line x1="12" y1="19" x2="12" y2="23"></line>
-              <line x1="8" y1="23" x2="16" y2="23"></line>
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
           </button>
-
           <button
             onClick={handleAnalyze} disabled={isLoading || !inputText}
             className={`mt-4 w-full py-4 px-6 rounded-xl font-bold text-white text-lg shadow-lg flex items-center justify-center gap-2 transition-all ${isLoading || !inputText ? "bg-slate-300 dark:bg-slate-700" : "bg-blue-600 hover:bg-blue-700"}`}
@@ -356,7 +360,6 @@ export default function Home() {
 
         {result && (
           <div className="animate-fade-in-up space-y-6">
-            
             <div className={`rounded-2xl shadow-lg border-2 overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
               <div className={`px-6 py-4 border-b flex items-center justify-between ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-blue-50 border-blue-100'}`}>
                 <h3 className={`font-bold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-800'}`}>✅ 医師提示用 / Medical Summary</h3>
@@ -373,7 +376,6 @@ export default function Home() {
               </div>
               
               <div className={`p-6 ${getTextSizeClass()}`}>
-                {/* ★推奨診療科の表示 */}
                 {result.departments && result.departments.length > 0 && (
                   <div className="mb-6">
                     <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{t.recommend}</span>
@@ -386,8 +388,12 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-
-                <FormattedText text={result.summary} />
+                
+                {/* 構造化データの表示（これがデザイン崩れを防ぐ鍵） */}
+                <SummarySection title={t.headers.cc} content={result.summary.chief_complaint} />
+                <SummarySection title={t.headers.history} content={result.summary.history} />
+                <SummarySection title={t.headers.symptoms} content={result.summary.symptoms} />
+                <SummarySection title={t.headers.background} content={result.summary.background} />
               </div>
               
               <div className={`px-6 py-4 border-t ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-100'}`}>
@@ -405,7 +411,6 @@ export default function Home() {
                 </p>
               </div>
             )}
-            
           </div>
         )}
       </main>
