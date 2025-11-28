@@ -1,7 +1,5 @@
-一つ目のターミナル（apiの処理部分）
-.\.venv\Scripts\activate
-uvicorn backend.main:app --reload
+apiの処理部分(backend)
+https://dashboard.render.com/ renderのダッシュボード
+https://medical-backend-92rr.onrender.com/
 
-二つ目のターミナル
-cd frontend
-npm run dev
+webサイトの見える部分(frontend)

@@ -21,8 +21,8 @@ model = genai.GenerativeModel(
 # 3. 画面構成
 st.set_page_config(page_title="医師提示用サマリー作成", layout="centered")
 
-st.title("🏥 症状伝え漏れ防止ツール")
-st.markdown("体調が悪い時、うまく説明できない内容をAIが整理します。\n**出力された画面をそのまま医師や救急隊員に見せてください。**")
+st.title("体調言語化・整理ツール")
+st.markdown("体調が悪い時、症状や不安要素を医師に伝わりやすいようAIが整理します。\n**出力された画面をそのまま医師や救急隊員に見せてください。**")
 
 # 入力エリア
 user_input = st.text_area(
