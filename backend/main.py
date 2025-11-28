@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import mm
+from reportlab.pdfbase.ttfonts import TTFont
 
 # --- PDF作成用ライブラリ ---
 from reportlab.pdfgen import canvas
@@ -73,14 +74,19 @@ async def create_pdf(request: UserRequest):
 
         # 3. スタイルの準備
         # 日本語フォントを登録
-        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3-UniJIS-UCS2-H'))
+        # 現在のファイルの場所からフォントファイルを探す
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        font_path = os.path.join(current_dir, "ipaexg.ttf")
+        
+        # フォントを登録 (名前を 'IPAexGothic' とする)
+        pdfmetrics.registerFont(TTFont('IPAexGothic', font_path))
         
         styles = getSampleStyleSheet()
         # 基本の日本語スタイルを作成
         jp_style = ParagraphStyle(
             name='Japanese',
             parent=styles['Normal'],
-            fontName='HeiseiMin-W3-UniJIS-UCS2-H',
+            fontName='IPAexGothic',
             fontSize=10,
             leading=16, # 行間
         )
@@ -88,7 +94,7 @@ async def create_pdf(request: UserRequest):
         title_style = ParagraphStyle(
             name='Title',
             parent=styles['Heading1'],
-            fontName='HeiseiMin-W3-UniJIS-UCS2-H',
+            fontName='IPAexGothic',
             fontSize=18,
             leading=24,
             alignment=1, # 中央揃え
