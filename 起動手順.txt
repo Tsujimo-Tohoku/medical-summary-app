@@ -1,0 +1,7 @@
+一つ目のターミナル（apiの処理部分）
+.\.venv\Scripts\activate
+uvicorn backend.main:app --reload
+
+二つ目のターミナル
+cd frontend
+npm run dev
