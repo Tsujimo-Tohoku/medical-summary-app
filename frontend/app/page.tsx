@@ -342,7 +342,12 @@ export default function Home() {
               </button>
               {isSettingsOpen && (
                 <div className={`absolute right-0 mt-2 w-64 rounded-lg shadow-xl border py-2 z-50 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                  {/* ... (Settings menu content same as before) ... */}
+                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Account</div>
+                <Link href="/profile" className={`block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+                  👤 プロフィール設定
+                </Link>
+                <div className={`border-t my-2 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}></div>
+
                   <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{t.settings.lang}</div>
                   <div className="grid grid-cols-2 gap-1 px-2">
                     {(['ja', 'en', 'zh', 'vi'] as LangKey[]).map((l) => (
