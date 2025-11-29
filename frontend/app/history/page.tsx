@@ -7,23 +7,23 @@ import Link from 'next/link';
 interface SummaryRecord {
   id: number;
   created_at: string;
-  content: string; // JSON文字列
-  departments: string; // JSON文字列
+  content: string;
+  departments: string;
+  user_id: string;
+  profiles: { display_name: string }; // 結合したプロフィール情報
 }
 
-// ▼ テキスト整形コンポーネント（トップページと同じもの）
+// ... (FormattedTextコンポーネントはそのまま使用) ...
 const FormattedText = ({ text }: { text: string }) => {
   if (!text) return null;
   return (
     <div className="whitespace-pre-wrap leading-relaxed text-sm">
       {text.split('\n').map((line, i) => {
         const trimmed = line.trim();
-        // 見出し
         if (trimmed.startsWith('###') || trimmed.startsWith('■')) {
           const content = trimmed.replace(/^#+\s*/, '').replace(/^■\s*/, '');
           return <strong key={i} className="block mt-3 mb-1 text-blue-700">{content}</strong>;
         }
-        // リスト
         if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
           return (
             <div key={i} className="flex gap-2 mb-1 ml-1">
@@ -39,7 +39,6 @@ const FormattedText = ({ text }: { text: string }) => {
             </div>
           );
         }
-        // 通常行（太字対応）
         return (
           <p key={i} className="min-h-[1em] mb-1">
             {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
@@ -58,8 +57,8 @@ const FormattedText = ({ text }: { text: string }) => {
 export default function HistoryPage() {
   const [summaries, setSummaries] = useState<SummaryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  // どのアコーディオンが開いているかを管理（IDを入れる）
   const [openId, setOpenId] = useState<number | null>(null);
+  const [myUserId, setMyUserId] = useState<string>("");
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -68,15 +67,17 @@ export default function HistoryPage() {
         setLoading(false);
         return;
       }
+      setMyUserId(user.id);
 
+      // ★修正: .eq('user_id', user.id) を削除し、全データ取得に変更
+      // （SQLのポリシーが自動で「自分と家族の分」だけに絞ってくれる）
       const { data, error } = await supabase
         .from('summaries')
-        .select('*')
-        .eq('user_id', user.id)
+        .select('*, profiles(display_name)') // プロフィールも一緒に取得
         .order('created_at', { ascending: false });
 
       if (error) console.error(error);
-      if (data) setSummaries(data);
+      if (data) setSummaries(data as any);
       setLoading(false);
     };
 
@@ -115,7 +116,6 @@ export default function HistoryPage() {
         ) : (
           <div className="space-y-4">
             {summaries.map((item) => {
-              // データ解析（エラー回避のためtry-catch）
               let summary, depts;
               try {
                 summary = JSON.parse(item.content);
@@ -126,31 +126,38 @@ export default function HistoryPage() {
                 year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
               });
               const time = new Date(item.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-              
               const isOpen = openId === item.id;
+              
+              // ★追加: 名前ラベルの色分け（自分なら青、家族なら緑）
+              const isMe = item.user_id === myUserId;
+              const nameLabel = item.profiles?.display_name || "名無し";
 
               return (
                 <div key={item.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md">
-                  {/* ヘッダー部分（クリックで開閉） */}
                   <div 
                     onClick={() => toggleOpen(item.id)}
                     className="bg-white px-5 py-4 cursor-pointer flex justify-between items-start gap-4 active:bg-slate-50"
                   >
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 text-xs text-slate-500 mb-1">
-                        <span className="font-bold bg-slate-100 px-2 py-0.5 rounded">{date} {time}</span>
-                        {depts.length > 0 && <span className="text-blue-600 font-bold">🏥 {depts[0]}</span>}
+                      <div className="flex items-center gap-2 text-xs mb-2">
+                        <span className={`font-bold px-2 py-0.5 rounded text-white ${isMe ? 'bg-blue-500' : 'bg-green-500'}`}>
+                          {nameLabel}
+                        </span>
+                        <span className="text-slate-400 font-bold">{date} {time}</span>
                       </div>
-                      <h3 className="text-lg font-bold text-slate-800 line-clamp-1">
-                        {summary.chief_complaint || "主訴なし"}
-                      </h3>
+                      
+                      <div className="flex flex-col gap-1">
+                        <h3 className="text-lg font-bold text-slate-800 line-clamp-1">
+                          {summary.chief_complaint || "主訴なし"}
+                        </h3>
+                        {depts.length > 0 && <span className="text-blue-600 text-xs font-bold">🏥 {depts[0]}</span>}
+                      </div>
                     </div>
-                    <div className="text-slate-400">
+                    <div className="text-slate-400 mt-2">
                       {isOpen ? '▲' : '▼'}
                     </div>
                   </div>
                   
-                  {/* 詳細部分（アコーディオン） */}
                   {isOpen && (
                     <div className="border-t border-slate-100 bg-slate-50 p-5 animate-fade-in">
                       <div className="space-y-4">
@@ -171,8 +178,6 @@ export default function HistoryPage() {
                           </div>
                         )}
                       </div>
-                      
-                      {/* コピーボタン等は将来的にここに追加可能 */}
                     </div>
                   )}
                 </div>
