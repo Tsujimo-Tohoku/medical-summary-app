@@ -30,11 +30,3 @@ console.log("==========================================");
 // --- 🕵️‍♀️ ここまで ---
 
 export default nextConfig;
-```
-
-#### Step 2: GitHubにプッシュ
-
-```powershell
-git add .
-git commit -m "Add build debug logs"
-git push
