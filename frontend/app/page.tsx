@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Metadata } from 'next';
-import { supabase } from '../lib/supabaseClient'; // ★追加: Supabaseを使う
+import { supabase } from '../lib/supabaseClient';
 import Link from 'next/link';
 
 const DICT = {
@@ -17,7 +17,7 @@ const DICT = {
     recommend: "関連する診療科の例（参考）",
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
     disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
-    login: "ログイン", logout: "ログアウト"
+    login: "ログイン", logout: "ログアウト", history: "履歴"
   },
   en: { 
     label: "English", button: "Create Medical Summary", loading: "AI is thinking...", copy: "Copy", copied: "Copied", share: "Share", pdf: "Save as PDF", explanationTitle: "Note for you",
@@ -30,7 +30,7 @@ const DICT = {
     recommend: "Related Departments (Ref)",
     headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
     disclaimer: "* This is AI-generated text, not a medical diagnosis. Please consult a doctor.",
-    login: "Login", logout: "Logout"
+    login: "Login", logout: "Logout", history: "History"
   },
   zh: { 
     label: "中文", button: "生成病历摘要", loading: "AI正在思考...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认",
@@ -43,7 +43,7 @@ const DICT = {
     recommend: "相关科室示例（参考）",
     headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" },
     disclaimer: "※此结果由AI生成，非医生诊断。仅供参考，请务必就医。",
-    login: "登录", logout: "登出"
+    login: "登录", logout: "登出", history: "历史记录"
   },
   vi: { 
     label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang suy nghĩ...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn",
@@ -56,7 +56,7 @@ const DICT = {
     recommend: "Các khoa liên quan (Tham khảo)",
     headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" },
     disclaimer: "* Đây là văn bản do AI tạo ra, không phải chẩn đoán y tế. Vui lòng tham khảo ý kiến bác sĩ.",
-    login: "Đăng nhập", logout: "Đăng xuất"
+    login: "Đăng nhập", logout: "Đăng xuất", history: "Lịch sử"
   },
 };
 
@@ -105,8 +105,8 @@ export default function Home() {
   const [isCopied, setIsCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
   
-  // ★追加: ユーザー情報
   const [user, setUser] = useState<any>(null);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null); // 保存状態メッセージ
   
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -119,7 +119,6 @@ export default function Home() {
       setCanShare(true);
     }
     
-    // ★追加: ログイン状態のチェックと監視
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
@@ -186,10 +185,13 @@ export default function Home() {
     }
   };
 
+  // ★修正: 分析完了後にSupabaseへ保存する処理を追加
   const handleAnalyze = async () => {
     if (!inputText) return;
     setIsLoading(true);
     setResult(null);
+    setSaveStatus(null); // リセット
+
     if (isRecording && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsRecording(false);
@@ -200,8 +202,25 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: inputText, language: t.label }),
       });
-      const data = await response.json();
+      const data: AnalysisResult = await response.json();
       setResult(data); 
+
+      // ログイン済みなら履歴に保存
+      if (user) {
+        try {
+          const { error } = await supabase.from('summaries').insert({
+            user_id: user.id,
+            content: JSON.stringify(data.summary), // 構造化データを文字列として保存
+            departments: JSON.stringify(data.departments || []) // 診療科も保存
+          });
+          if (error) throw error;
+          setSaveStatus("✅ 履歴に保存しました");
+        } catch (dbError) {
+          console.error("Save error:", dbError);
+          setSaveStatus("⚠️ 履歴保存に失敗しました");
+        }
+      }
+
     } catch (error) {
       console.error(error);
       alert("エラーが発生しました / Error occurred");
@@ -210,6 +229,7 @@ export default function Home() {
     }
   };
 
+  // ... (PDF, Copy, Share functions are same as before)
   const createFormattedSummaryText = (summary: SummaryData) => {
     return `■ ${t.headers.cc}\n${summary.chief_complaint}\n\n■ ${t.headers.history}\n${summary.history}\n\n■ ${t.headers.symptoms}\n${summary.symptoms}\n\n■ ${t.headers.background}\n${summary.background}`;
   };
@@ -257,7 +277,6 @@ export default function Home() {
     }
   };
 
-  // ★追加: ログアウト処理
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -285,20 +304,29 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">AI</div>
-            <h1 className="text-xl font-bold tracking-tight">
+            <h1 className="text-xl font-bold tracking-tight hidden sm:block">
               Medical Summary <span className="text-blue-600 dark:text-blue-400">Assistant</span>
             </h1>
+            <h1 className="text-lg font-bold tracking-tight sm:hidden">Medical AI</h1>
           </div>
           
           <div className="flex items-center gap-3">
-            {/* ★追加: ログイン/ログアウトボタン */}
             {user ? (
-              <button 
-                onClick={handleLogout}
-                className={`text-sm font-bold px-3 py-1.5 rounded-lg border transition ${theme === 'dark' ? 'border-slate-600 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}
-              >
-                {t.logout}
-              </button>
+              <>
+                {/* ★追加: 履歴ページへのリンク */}
+                <Link 
+                  href="/history"
+                  className={`text-sm font-bold px-3 py-1.5 rounded-lg border transition hidden sm:block ${theme === 'dark' ? 'border-slate-600 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {t.history}
+                </Link>
+                <button 
+                  onClick={handleLogout}
+                  className={`text-sm font-bold px-3 py-1.5 rounded-lg border transition ${theme === 'dark' ? 'border-slate-600 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {t.logout}
+                </button>
+              </>
             ) : (
               <Link 
                 href="/login"
@@ -308,15 +336,13 @@ export default function Home() {
               </Link>
             )}
 
-            {/* 設定アイコン */}
             <div className="relative" ref={settingsRef}>
               <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`} aria-label="Settings">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               </button>
-
               {isSettingsOpen && (
                 <div className={`absolute right-0 mt-2 w-64 rounded-lg shadow-xl border py-2 z-50 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                  {/* 設定メニューの中身（変更なし） */}
+                  {/* ... (Settings menu content same as before) ... */}
                   <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{t.settings.lang}</div>
                   <div className="grid grid-cols-2 gap-1 px-2">
                     {(['ja', 'en', 'zh', 'vi'] as LangKey[]).map((l) => (
@@ -360,7 +386,7 @@ export default function Home() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         
-        {/* 使い方ガイド */}
+        {/* 使い方ガイド (省略なし) */}
         <div className="mb-8">
           <details className={`group border rounded-xl shadow-sm open:shadow-md transition-all duration-200 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
             <summary className="flex items-center justify-between p-4 cursor-pointer list-none font-bold select-none">
@@ -409,9 +435,17 @@ export default function Home() {
           </button>
         </div>
 
+        {/* 結果表示エリア */}
         {result && (
           <div className="animate-fade-in-up space-y-6">
             
+            {/* 保存成功メッセージ */}
+            {saveStatus && (
+              <div className={`p-4 rounded-lg font-bold text-center ${saveStatus.includes("失敗") ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>
+                {saveStatus}
+              </div>
+            )}
+
             <div className={`rounded-2xl shadow-lg border-2 overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
               <div className={`px-6 py-4 border-b flex items-center justify-between ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-blue-50 border-blue-100'}`}>
                 <h3 className={`font-bold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-800'}`}>✅ {t.settings.lang === '言語' ? '医師提示用' : 'Summary'}</h3>
