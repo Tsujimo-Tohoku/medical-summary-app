@@ -55,32 +55,16 @@ export default function Family() {
     }
   };
 
-  // 家族グループ作成
+// 家族グループ作成
   const createFamily = async () => {
     if (!familyName) return;
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("ログインしてください");
+      // SQLで作った関数「create_family_group」を呼び出すだけ！
+      const { data, error } = await supabase
+        .rpc('create_family_group', { name_input: familyName });
 
-      // ランダムな招待コード生成 (6桁英数)
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      
-      // 1. 家族作成
-      const { data: newFamily, error: famError } = await supabase
-        .from('families')
-        .insert({ name: familyName, invite_code: code })
-        .select()
-        .single();
-
-      if (famError) throw famError;
-
-      // 2. 自分をメンバーに追加
-      const { error: memError } = await supabase
-        .from('family_members')
-        .insert({ family_id: newFamily.id, user_id: user.id });
-
-      if (memError) throw memError;
+      if (error) throw error;
 
       await fetchFamilyStatus();
       setMessage({ text: "家族グループを作成しました！", type: 'success' });
@@ -88,6 +72,7 @@ export default function Family() {
     } catch (error) {
       console.error(error);
       setMessage({ text: "作成に失敗しました。", type: 'error' });
+    } finally {
       setLoading(false);
     }
   };
