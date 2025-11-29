@@ -12,8 +12,9 @@ const DICT = {
     step3: "整理されたサマリーが表示されます。そのまま医師に見せるか、Web問診票にコピーしてください。",
     settings: { title: "設定", lang: "言語", appearance: "表示設定", fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ" },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
-    recommend: "おすすめの診療科",
-    headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" }
+    recommend: "関連する診療科の例（参考）",
+    headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
+    disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。"
   },
   en: { 
     label: "English", button: "Create Medical Summary", loading: "AI is thinking...", copy: "Copy", copied: "Copied", share: "Share", pdf: "Save as PDF", explanationTitle: "Note for you",
@@ -23,8 +24,9 @@ const DICT = {
     step3: "Show the summary to your doctor.",
     settings: { title: "Settings", lang: "Language", appearance: "Appearance", fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size" },
     placeholder: "(Ex) I have a throbbing pain in my right stomach since last night...",
-    recommend: "Recommended Departments",
-    headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" }
+    recommend: "Related Departments (Ref)",
+    headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
+    disclaimer: "* This is AI-generated text, not a medical diagnosis. Please consult a doctor."
   },
   zh: { 
     label: "中文", button: "生成病历摘要", loading: "AI正在思考...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认",
@@ -34,8 +36,9 @@ const DICT = {
     step3: "向医生展示摘要。",
     settings: { title: "设置", lang: "语言", appearance: "外观", fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸" },
     placeholder: "（例）从昨天晚上开始右腹部疼痛...",
-    recommend: "推荐科室",
-    headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" }
+    recommend: "相关科室示例（参考）",
+    headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" },
+    disclaimer: "※此结果由AI生成，非医生诊断。仅供参考，请务必就医。"
   },
   vi: { 
     label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang suy nghĩ...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn",
@@ -45,8 +48,9 @@ const DICT = {
     step3: "Đưa bản tóm tắt cho bác sĩ.",
     settings: { title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF" },
     placeholder: "(Ví dụ) Tôi bị đau bụng bên phải từ tối qua...",
-    recommend: "Khoa đề xuất",
-    headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" }
+    recommend: "Các khoa liên quan (Tham khảo)",
+    headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" },
+    disclaimer: "* Đây là văn bản do AI tạo ra, không phải chẩn đoán y tế. Vui lòng tham khảo ý kiến bác sĩ."
   },
 };
 
@@ -64,12 +68,12 @@ interface SummaryData {
 }
 
 interface AnalysisResult {
-  summary: SummaryData; // ここが構造化された
+  summary: SummaryData; 
   departments?: string[];
   explanation?: string;
 }
 
-// ▼ 太字コンポーネント（シンプル化）
+// ▼ 太字コンポーネント
 const FormattedText = ({ text, className }: { text: string, className?: string }) => {
   if (!text) return null;
   return (
@@ -183,7 +187,7 @@ export default function Home() {
     }
   };
 
-  // 表示用にテキストを結合して作成する関数（コピーやPDF用）
+  // 表示用にテキストを結合して作成する関数
   const createFormattedSummaryText = (summary: SummaryData) => {
     return `■ ${t.headers.cc}\n${summary.chief_complaint}\n\n■ ${t.headers.history}\n${summary.history}\n\n■ ${t.headers.symptoms}\n${summary.symptoms}\n\n■ ${t.headers.background}\n${summary.background}`;
   };
@@ -213,8 +217,7 @@ export default function Home() {
 
   const handleCopy = () => {
     if (!result) return;
-    // クリップボードにはマークダウン記号を除去したプレーンテキストを入れたほうが親切かもしれないが、
-    // ここでは強調情報を残すためそのままにするか、整形するか選べる。今回は整形済みテキストをコピー。
+    // 太字記号(**)を除去してコピー
     const textToCopy = createFormattedSummaryText(result.summary).replace(/\*\*/g, ""); 
     navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
@@ -238,7 +241,7 @@ export default function Home() {
   const inputClass = `w-full h-48 p-4 rounded-xl outline-none resize-none transition-all ${getTextSizeClass()} ${theme === 'dark' ? 'bg-slate-900 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-blue-500' : 'bg-slate-50 border border-slate-200 text-slate-700 focus:ring-2 focus:ring-blue-500'}`;
   const headerClass = `border-b sticky top-0 z-10 shadow-sm transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`;
 
-  // サマリー表示用のセクションコンポーネント
+  // サマリー表示用のセクションコンポーネント（デザイン重視）
   const SummarySection = ({ title, content }: { title: string, content: string }) => (
     <div className="mb-6 last:mb-0">
       <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2 border-l-4 border-blue-500 pl-2">
@@ -362,7 +365,7 @@ export default function Home() {
           <div className="animate-fade-in-up space-y-6">
             <div className={`rounded-2xl shadow-lg border-2 overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
               <div className={`px-6 py-4 border-b flex items-center justify-between ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-blue-50 border-blue-100'}`}>
-                <h3 className={`font-bold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-800'}`}>✅ 医師提示用 / Medical Summary</h3>
+                <h3 className={`font-bold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-800'}`}>✅ {t.settings.lang === '言語' ? '医師提示用' : 'Summary'}</h3>
                 <div className="flex gap-2">
                   <button onClick={handleCopy} className={`text-xs border px-3 py-1.5 rounded-lg font-bold transition ${theme === 'dark' ? 'bg-slate-800 border-slate-600 text-blue-300 hover:bg-slate-700' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
                     {isCopied ? t.copied : t.copy}
@@ -376,24 +379,35 @@ export default function Home() {
               </div>
               
               <div className={`p-6 ${getTextSizeClass()}`}>
+                
+                {/* 診療科リコメンド */}
                 {result.departments && result.departments.length > 0 && (
                   <div className="mb-6">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{t.recommend}</span>
+                    <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                      {t.recommend}
+                    </span>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {result.departments.map((dept, i) => (
-                        <span key={i} className={`px-3 py-1 rounded-full text-sm font-bold border ${theme === 'dark' ? 'bg-slate-700 border-slate-600 text-slate-200' : 'bg-white border-slate-300 text-slate-700'}`}>
-                          🏥 {dept}
+                        <span key={i} className={`px-3 py-1 rounded-full text-sm font-bold border ${theme === 'dark' ? 'bg-slate-700 border-slate-600 text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                          {dept}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
                 
-                {/* 構造化データの表示（これがデザイン崩れを防ぐ鍵） */}
+                {/* 構造化データの表示 */}
                 <SummarySection title={t.headers.cc} content={result.summary.chief_complaint} />
                 <SummarySection title={t.headers.history} content={result.summary.history} />
                 <SummarySection title={t.headers.symptoms} content={result.summary.symptoms} />
                 <SummarySection title={t.headers.background} content={result.summary.background} />
+
+                {/* 免責事項 */}
+                <div className={`mt-6 p-3 rounded-lg text-xs leading-relaxed flex gap-2 ${theme === 'dark' ? 'bg-red-900/20 text-red-300' : 'bg-red-50 text-red-600'}`}>
+                  <span className="font-bold">⚠️</span>
+                  {t.disclaimer}
+                </div>
               </div>
               
               <div className={`px-6 py-4 border-t ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-100'}`}>
@@ -403,6 +417,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* 患者用メモ（ある場合のみ） */}
             {result.explanation && result.explanation.trim() !== "" && (
               <div className={`rounded-xl border p-6 ${theme === 'dark' ? 'bg-amber-900/30 border-amber-800' : 'bg-amber-50 border-amber-200'}`}>
                 <h3 className={`font-bold mb-2 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-800'}`}>💡 {t.explanationTitle}</h3>
@@ -420,7 +435,6 @@ export default function Home() {
           <div className="flex justify-center gap-6 mb-4">
             <a href="/privacy" className="hover:text-blue-600 transition">Privacy</a>
             <a href="#" className="hover:text-blue-600 transition">Terms</a>
-            {/* ★修正: お問い合わせリンクを /about に変更 */}
             <a href="/about" className="hover:text-blue-600 transition">Contact / About</a>
           </div>
           <p>© 2025 Medical Summary Assistant.</p>
