@@ -1,12 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-// ★ここに直接書き込みます（これで読み込みミスは100%起きません）
-// 画像から読み取ったあなたのURLです
-const supabaseUrl = "https://izowhygftofarmoenjxd.supabase.co"
+// 環境変数を読み込む
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// ★ここに「ey...」から始まる長いキー（Anon Key）を貼り付けてください
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6b3doeWdmdG9mYXJtb2VuanhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzNjYwODQsImV4cCI6MjA3OTk0MjA4NH0.poOPiTbLO3aUap2iimLFV6BYXfBOSjI0ffMuNceHcmo"
+// デバッグ用: 本番環境で値が取れているか確認（キーの中身は隠す）
+if (typeof window !== 'undefined') {
+  console.log("Supabase Config Check:", {
+    url: supabaseUrl ? "Set" : "Missing",
+    key: supabaseAnonKey ? "Set" : "Missing"
+  });
+}
 
-// ※もしキーを忘れたら、Supabase管理画面の [Settings] -> [API] で確認できます
+// 安全策: 環境変数がない場合（ビルド時など）はダミーを入れてクラッシュを防ぐ
+const url = supabaseUrl || "https://placeholder.supabase.co"
+const key = supabaseAnonKey || "placeholder-key"
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(url, key)
