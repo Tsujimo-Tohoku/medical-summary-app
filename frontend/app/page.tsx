@@ -173,7 +173,6 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
     switch(fontSize) { case 'small': return 'text-sm'; case 'large': return 'text-xl'; default: return 'text-base'; }
   };
 
-  // ★修正: cardClass の定義を追加
   const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
 
   const handleAnalyze = async () => {
@@ -360,7 +359,15 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
           </div>
         )}
       </main>
-      <footer className="py-8 text-center text-xs text-slate-400"><p>© 2025 KarteNo.</p></footer>
+      <footer className="py-8 text-center text-xs text-slate-400">
+        <div className="flex justify-center gap-6 mb-2">
+          <Link href="/terms" className="hover:text-teal-600 transition">利用規約</Link>
+          <Link href="/privacy" className="hover:text-teal-600 transition">プライバシーポリシー</Link>
+          <Link href="/contact" className="hover:text-teal-600 transition">お問い合わせ</Link>
+          <Link href="/about" className="hover:text-teal-600 transition">開発者について</Link>
+        </div>
+        <p>© 2025 KarteNo.</p>
+      </footer>
     </div>
   );
 };
@@ -445,6 +452,7 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
             <Link href="/terms" className="hover:text-white transition">利用規約</Link>
             <Link href="/privacy" className="hover:text-white transition">プライバシーポリシー</Link>
             <Link href="/contact" className="hover:text-white transition">お問い合わせ</Link>
+            <Link href="/about" className="hover:text-white transition">開発者について</Link>
           </div>
           <p className="text-xs text-slate-600">© 2025 KarteNo. All rights reserved.</p>
         </div>
