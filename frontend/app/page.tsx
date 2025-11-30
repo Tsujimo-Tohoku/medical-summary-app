@@ -7,7 +7,7 @@ import Link from 'next/link';
 // アイコンライブラリ
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
-  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users
+  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
@@ -31,7 +31,7 @@ const DICT = {
     },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
     recommend: "関連する診療科の例（参考）",
-    // 医師用ヘッダーは日本語固定のため、ここは参照用ですが日本語版を基準にします
+    // 医師用ヘッダーは日本語固定
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
     disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
     login: "ログイン", logout: "ログアウト", history: "履歴",
@@ -210,7 +210,6 @@ export default function MedicalSummaryApp() {
       return;
     }
     const recognition = new SpeechRecognition();
-    // 言語設定に応じて音声認識の言語も変更
     recognition.lang = lang === 'ja' ? 'ja-JP' : lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'vi-VN';
     recognition.interimResults = true;
     recognition.continuous = true;
@@ -274,7 +273,6 @@ export default function MedicalSummaryApp() {
   const handleDownloadPDF = async () => {
     if (!result) return;
     try {
-      // PDF出力も日本語のヘッダーで固定する
       const h = DICT.ja.headers;
       const fullText = `■ ${h.cc}\n${result.summary.chief_complaint}\n\n■ ${h.history}\n${result.summary.history}\n\n■ ${h.symptoms}\n${result.summary.symptoms}\n\n■ ${h.background}\n${result.summary.background}`;
       const response = await fetch(`${BACKEND_URL}/pdf`, {
@@ -296,7 +294,6 @@ export default function MedicalSummaryApp() {
 
   const handleCopy = () => {
     if (!result) return;
-    // コピーも日本語ヘッダー固定
     const h = DICT.ja.headers;
     const textToCopy = `【${h.cc}】${result.summary.chief_complaint}\n【${h.history}】${result.summary.history}\n【${h.symptoms}】${result.summary.symptoms}\n【${h.background}】${result.summary.background}`.replace(/\*\*/g, "");
     navigator.clipboard.writeText(textToCopy);
@@ -316,11 +313,11 @@ export default function MedicalSummaryApp() {
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-teal-600/20">
-              <Activity size={18} />
+              <FilePlus size={18} />
             </div>
-            {/* アプリ名をSonaelに変更 */}
-            <h1 className="text-lg font-bold tracking-tight">
-              Sonael <span className="text-teal-600 font-normal text-sm ml-1 hidden sm:inline">Medical Support</span>
+            {/* アプリ名をKarteNoに変更 */}
+            <h1 className="text-lg font-bold tracking-tight font-mono">
+              KarteNo <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline tracking-normal">Smart Medical Summary</span>
             </h1>
           </div>
           
@@ -518,7 +515,7 @@ export default function MedicalSummaryApp() {
           <Link href="/privacy" className="hover:text-teal-600 transition">Privacy</Link>
           <Link href="/terms" className="hover:text-teal-600 transition">Terms</Link>
         </div>
-        <p>© 2025 Sonael.</p>
+        <p>© 2025 KarteNo.</p>
       </footer>
     </div>
   );
