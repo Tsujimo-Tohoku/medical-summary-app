@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 // ==========================================
 // ★STEP 1: 本番環境（VS Code）では、以下の3行のコメントアウト( // )を外してください
 // ==========================================
-import { supabase } from '../../lib/supabaseClient';
+ import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 type LinkProps = any; // エラー回避用
 
@@ -24,7 +24,6 @@ interface SummaryRecord {
   created_at: string;
   content: string; 
   departments: string;
-  // 結合用
   display_name?: string;
   is_me?: boolean;
 }
@@ -49,7 +48,6 @@ export default function HistoryPage() {
     init();
   }, []);
 
-  // フィルタリング処理
   useEffect(() => {
     if (filter === 'me') {
       setFilteredSummaries(summaries.filter(s => s.is_me));
@@ -60,7 +58,6 @@ export default function HistoryPage() {
 
   const fetchHistory = async (myUserId: string) => {
     try {
-      // 1. サマリー一覧を取得（RLSにより家族分も含まれる）
       const { data: summaryData, error } = await supabase
         .from('summaries')
         .select('*')
@@ -72,8 +69,6 @@ export default function HistoryPage() {
         return;
       }
 
-      // 2. 関連するユーザーのプロフィールを取得
-      // 重複を除いたユーザーIDリストを作成
       const userIds = Array.from(new Set(summaryData.map((s: any) => s.user_id)));
       
       const { data: profiles } = await supabase
@@ -81,7 +76,6 @@ export default function HistoryPage() {
         .select('id, display_name')
         .in('id', userIds);
 
-      // 3. データを結合
       const combined = summaryData.map((item: any) => {
         const profile = profiles?.find((p: any) => p.id === item.user_id);
         return {
@@ -105,10 +99,8 @@ export default function HistoryPage() {
     const d = new Date(dateString);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
-    
     const datePart = d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
     const timePart = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-    
     return isToday ? `今日 ${timePart}` : `${datePart} ${timePart}`;
   };
 
@@ -134,7 +126,6 @@ export default function HistoryPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         
-        {/* Filter Tabs */}
         <div className="flex bg-slate-200 p-1 rounded-xl mb-6">
           <button 
             onClick={() => setFilter('all')}
@@ -169,51 +160,52 @@ export default function HistoryPage() {
               if (!content) return null;
 
               return (
-                <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition group relative overflow-hidden">
-                  {/* Left Accent Bar */}
-                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${item.is_me ? 'bg-teal-500' : 'bg-blue-400'}`}></div>
+                // ★修正: Linkコンポーネントでラップして詳細ページへ遷移
+                <Link key={item.id} href={`/history/${item.id}`} className="block">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition group relative overflow-hidden">
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${item.is_me ? 'bg-teal-500' : 'bg-blue-400'}`}></div>
 
-                  <div className="flex items-start justify-between mb-3 pl-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${item.is_me ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
-                        {item.display_name?.substring(0, 1) || "?"}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-700">
-                          {item.display_name} {item.is_me && <span className="text-slate-400 font-normal">(あなた)</span>}
-                        </p>
-                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-                          <Clock size={10} />
-                          {formatDate(item.created_at)}
+                    <div className="flex items-start justify-between mb-3 pl-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${item.is_me ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {item.display_name?.substring(0, 1) || "?"}
                         </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">
+                            {item.display_name} {item.is_me && <span className="text-slate-400 font-normal">(あなた)</span>}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+                            <Clock size={10} />
+                            {formatDate(item.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-1">
+                        {parseContent(item.departments)?.slice(0, 1).map((dept: string, i: number) => (
+                          <span key={i} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-md border border-slate-200">
+                            {dept}
+                          </span>
+                        ))}
                       </div>
                     </div>
                     
-                    {/* 診療科タグ (あれば) */}
-                    <div className="flex gap-1">
-                      {parseContent(item.departments)?.slice(0, 1).map((dept: string, i: number) => (
-                        <span key={i} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-md border border-slate-200">
-                          {dept}
-                        </span>
-                      ))}
+                    <div className="pl-3">
+                      <h3 className="font-bold text-slate-800 text-base mb-1 line-clamp-1">
+                        {content.chief_complaint || "主訴なし"}
+                      </h3>
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                        {content.history}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pl-3 flex justify-end">
+                      <span className="text-xs font-bold text-teal-600 flex items-center gap-1 group-hover:underline">
+                        詳細を見る <ChevronRight size={14} />
+                      </span>
                     </div>
                   </div>
-                  
-                  <div className="pl-3">
-                    <h3 className="font-bold text-slate-800 text-base mb-1 line-clamp-1">
-                      {content.chief_complaint || "主訴なし"}
-                    </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {content.history}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 pl-3 flex justify-end">
-                    <button className="text-xs font-bold text-teal-600 flex items-center gap-1 hover:underline">
-                      詳細を見る <ChevronRight size={14} />
-                    </button>
-                  </div>
-                </div>
+                </Link>
               );
             })}
           </div>
