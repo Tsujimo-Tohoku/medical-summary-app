@@ -22,7 +22,6 @@ import {
   ShieldCheck, Loader2, AlertCircle
 } from 'lucide-react';
 
-// 型定義
 interface Member {
   user_id: string;
   role: string;
@@ -59,21 +58,17 @@ export default function FamilyPage() {
     init();
   }, []);
 
-  // 家族の所属状況を確認する関数
   const fetchFamilyStatus = async (userId: string) => {
     try {
-      // 1. 自分が所属している家族IDを探す
       const { data: memberData, error: memberError } = await supabase
         .from('family_members')
         .select('family_id, role')
         .eq('user_id', userId)
         .single();
 
-      // データがない(PGRST116)＝まだ家族に入っていない（正常）
       if (memberError && memberError.code !== 'PGRST116') throw memberError;
 
       if (memberData) {
-        // 2. 家族の詳細情報を取得
         const { data: familyData } = await supabase
           .from('families')
           .select('*')
@@ -82,7 +77,6 @@ export default function FamilyPage() {
         
         if (familyData) {
           setFamily(familyData);
-          // 3. 同じ家族のメンバー一覧を取得
           const { data: membersData } = await supabase
             .from('family_members')
             .select('*')
@@ -98,23 +92,18 @@ export default function FamilyPage() {
     }
   };
 
-  // ★重要: RPC関数を使って安全に家族を作成する
-  // これにより「作成者本人」も自動的にオーナーとして登録される
   const handleCreateFamily = async () => {
     if (!familyNameInput.trim()) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // Supabase側で定義した create_family_with_owner 関数を呼び出す
       const { data, error } = await supabase
         .rpc('create_family_with_owner', { 
           family_name: familyNameInput 
         });
 
       if (error) throw error;
-
-      // 成功したら画面を再読み込みして最新状態にする
       await fetchFamilyStatus(user.id);
 
     } catch (e: any) {
@@ -124,44 +113,35 @@ export default function FamilyPage() {
     }
   };
 
-  // 招待コードを使って既存の家族に参加する
+  // ★修正箇所: RPCを使って安全に参加する
   const handleJoinFamily = async () => {
     if (!inviteCodeInput.trim()) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // 1. 招待コードから家族IDを特定
-      const { data: targetFamily, error: searchError } = await supabase
-        .from('families')
-        .select('id')
-        .eq('invite_code', inviteCodeInput.trim())
-        .single();
-
-      if (searchError || !targetFamily) {
-        throw new Error("招待コードが見つかりません。コードを確認してください。");
-      }
-
-      // 2. 自分をメンバーに追加
-      const { error: joinError } = await supabase
-        .from('family_members')
-        .insert({
-          family_id: targetFamily.id,
-          user_id: user.id,
-          role: 'member'
+      // search -> insert ではなく、RPC一発で処理する
+      const { error } = await supabase
+        .rpc('join_family_by_code', { 
+          invite_code_input: inviteCodeInput.trim() 
         });
 
-      if (joinError) throw joinError;
+      if (error) throw error;
 
       await fetchFamilyStatus(user.id);
 
     } catch (e: any) {
-      setErrorMsg(e.message);
+      console.error(e);
+      let msg = e.message || "Unknown error";
+      // SQLのエラーメッセージを人間にわかりやすく翻訳
+      if (msg.includes("Invalid invite code")) msg = "招待コードが見つかりません。コードを確認してください。";
+      if (msg.includes("Already a member")) msg = "既にこの家族に参加しています。";
+      
+      setErrorMsg("参加に失敗しました: " + msg);
       setLoading(false);
     }
   };
 
-  // 家族から抜ける処理
   const handleLeaveFamily = async () => {
     if (!confirm("本当にこの家族グループから抜けますか？")) return;
     setLoading(true);
@@ -222,7 +202,6 @@ export default function FamilyPage() {
             <button onClick={() => setErrorMsg(null)} className="ml-auto text-xs underline">閉じる</button>
           </div>
         ) : family ? (
-          // --- 家族参加済みの場合 ---
           <div className="space-y-6 animate-fade-in">
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
               <div className="w-20 h-20 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm">
@@ -277,9 +256,7 @@ export default function FamilyPage() {
             </div>
           </div>
         ) : (
-          // --- 家族未所属の場合 ---
           <div className="space-y-8 animate-fade-in">
-            {/* Create Block */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-teal-100 p-2.5 rounded-xl text-teal-600 shadow-sm"><Users size={24}/></div>
@@ -312,7 +289,6 @@ export default function FamilyPage() {
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            {/* Join Block */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600 shadow-sm"><UserPlus size={24}/></div>
