@@ -9,21 +9,18 @@ export default function Family() {
   const [family, setFamily] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   
-  // 招待コード関連の状態
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [isCopied, setIsCopied] = useState(false); // コピー状態
-  const [canShare, setCanShare] = useState(false); // 共有機能判定
+  const [isCopied, setIsCopied] = useState(false);
+  const [canShare, setCanShare] = useState(false);
 
-  // 入力フォーム用
   const [familyName, setFamilyName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchFamilyStatus();
-    // 共有機能が使えるかチェック
     if (typeof navigator !== 'undefined' && (navigator as any).share) {
       setCanShare(true);
     }
@@ -61,6 +58,10 @@ export default function Family() {
             name: m.profiles?.display_name || "名無し"
           })));
         }
+      } else {
+        // 所属していない場合
+        setFamily(null);
+        setMembers([]);
       }
     } catch (error) {
       console.error(error);
@@ -124,7 +125,38 @@ export default function Family() {
     }
   };
 
-  // コピー機能
+  // ★追加: グループから抜ける処理
+  const leaveFamily = async () => {
+    if (!confirm("本当にこの家族グループから抜けますか？\n（あなたの履歴データは消えませんが、グループから見えなくなります）")) return;
+    
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !family) return;
+
+      // family_membersテーブルから自分の行を削除
+      const { error } = await supabase
+        .from('family_members')
+        .delete()
+        .eq('family_id', family.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // 状態リセット
+      setFamily(null);
+      setMembers([]);
+      setMessage({ text: "グループから抜けました。", type: 'success' });
+      await fetchFamilyStatus(); // 最新状態（未所属）を取得
+
+    } catch (error) {
+      console.error(error);
+      setMessage({ text: "脱退に失敗しました。", type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopyCode = () => {
     if (!inviteCode) return;
     navigator.clipboard.writeText(inviteCode);
@@ -132,7 +164,6 @@ export default function Family() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // 共有機能
   const handleShareCode = async () => {
     if (!inviteCode) return;
     const shareText = `Medical Summary Assistantの家族招待コードが届いています。\n\n招待コード: ${inviteCode}\n有効期限: ${expiresAt ? formatExpiry(expiresAt) : ''}まで\n\nこちらのURLからアプリを開いて入力してください:\n${window.location.origin}/family`;
@@ -232,12 +263,8 @@ export default function Family() {
                       >
                         {isCopied ? 'コピー完了' : '📋 コピー'}
                       </button>
-                      
                       {canShare && (
-                        <button 
-                          onClick={handleShareCode}
-                          className="flex-1 max-w-[140px] text-sm font-bold py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition flex items-center justify-center gap-2"
-                        >
+                        <button onClick={handleShareCode} className="flex-1 max-w-[140px] text-sm font-bold py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition flex items-center justify-center gap-2">
                           📤 送る
                         </button>
                       )}
@@ -246,22 +273,14 @@ export default function Family() {
                     <p className="text-xs text-red-500 font-bold mb-4">
                       有効期限: {expiresAt && formatExpiry(expiresAt)} まで
                     </p>
-                    <button 
-                      onClick={generateCode} 
-                      disabled={generating}
-                      className="text-xs text-slate-400 hover:text-slate-600 underline"
-                    >
-                      コードを再発行（古いコードは無効になります）
+                    <button onClick={generateCode} disabled={generating} className="text-xs text-slate-400 hover:text-slate-600 underline">
+                      コードを再発行
                     </button>
                   </>
                 ) : (
                   <>
                     <p className="text-sm text-slate-600 mb-3">現在有効な招待コードはありません。</p>
-                    <button 
-                      onClick={generateCode} 
-                      disabled={generating}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition"
-                    >
+                    <button onClick={generateCode} disabled={generating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition">
                       {generating ? "発行中..." : "招待コードを発行する"}
                     </button>
                     <p className="text-xs text-slate-400 mt-2">※発行から30分間のみ有効です</p>
@@ -274,7 +293,7 @@ export default function Family() {
               <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
                 <span>👨‍👩‍👧‍👦</span> メンバー ({members.length}人)
               </h3>
-              <ul className="space-y-3">
+              <ul className="space-y-3 mb-6">
                 {members.map((m) => (
                   <li key={m.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                     <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-lg shadow-sm font-bold text-slate-400">
@@ -284,6 +303,16 @@ export default function Family() {
                   </li>
                 ))}
               </ul>
+
+              {/* ★追加: グループ脱退ボタン */}
+              <div className="pt-6 border-t border-slate-100 text-center">
+                <button 
+                  onClick={leaveFamily}
+                  className="text-sm text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition font-bold"
+                >
+                  🚪 グループから抜ける
+                </button>
+              </div>
             </div>
           </div>
         )}
