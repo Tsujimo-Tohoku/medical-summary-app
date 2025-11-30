@@ -24,6 +24,7 @@ import {
 interface Member {
   user_id: string;
   role: string;
+  display_name?: string; // 追加: 表示名
 }
 
 interface Family {
@@ -75,12 +76,9 @@ export default function FamilyPage() {
   useEffect(() => {
     if (!family?.invite_code_created_at) return;
 
-    // 有効期限の絶対時刻を計算
     const created = new Date(family.invite_code_created_at).getTime();
-    const expireTime = created + (30 * 60 * 1000); // 30分後
+    const expireTime = created + (30 * 60 * 1000); 
     const expireDateObj = new Date(expireTime);
-    
-    // "14:30" のような形式で時刻を表示
     setExpiryTimeStr(expireDateObj.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
 
     const timer = setInterval(() => {
@@ -120,12 +118,33 @@ export default function FamilyPage() {
         
         if (familyData) {
           setFamily(familyData);
+          
+          // メンバー一覧を取得
           const { data: membersData } = await supabase
             .from('family_members')
             .select('*')
             .eq('family_id', familyData.id);
-          // @ts-ignore
-          setMembers(membersData || []);
+            
+          if (membersData) {
+            // ★追加: プロフィール情報を取得して結合する
+            const userIds = membersData.map((m: any) => m.user_id);
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, display_name')
+              .in('id', userIds);
+
+            // メンバー情報に名前をマージ
+            const membersWithNames = membersData.map((m: any) => {
+              const profile = profiles?.find((p: any) => p.id === m.user_id);
+              return {
+                ...m,
+                display_name: profile?.display_name || "名無しさん"
+              };
+            });
+            
+            // @ts-ignore
+            setMembers(membersWithNames);
+          }
         }
       }
     } catch (e) {
@@ -176,7 +195,6 @@ export default function FamilyPage() {
       if (msg.includes("Invalid invite code")) msg = "招待コードが見つかりません。";
       if (msg.includes("Invite code has expired")) msg = "招待コードの有効期限(30分)が切れています。再発行してもらってください。";
       if (msg.includes("Already a member")) msg = "既にこの家族に参加しています。";
-      
       setErrorMsg(msg);
       setLoading(false);
     }
@@ -359,12 +377,14 @@ export default function FamilyPage() {
                 {members.map((m) => (
                   <div key={m.user_id} className="px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
+                      {/* 名前（display_name）の頭文字を表示 */}
                       <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-sm">
-                        {m.user_id.substring(0, 2)}
+                        {m.display_name ? m.display_name.substring(0, 1) : m.user_id.substring(0, 1)}
                       </div>
                       <div>
+                        {/* 取得した名前を表示 */}
                         <p className="text-sm font-bold text-slate-700">
-                          {m.user_id === user.id ? "あなた" : "家族メンバー"}
+                          {m.user_id === user.id ? `${m.display_name} (あなた)` : m.display_name}
                         </p>
                         <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${m.role === 'owner' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
                           {m.role}
@@ -384,7 +404,6 @@ export default function FamilyPage() {
           </div>
         ) : (
           <div className="space-y-8 animate-fade-in">
-            {/* Create Block */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-teal-100 p-2.5 rounded-xl text-teal-600 shadow-sm"><Users size={24}/></div>
@@ -405,7 +424,6 @@ export default function FamilyPage() {
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            {/* Join Block */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600 shadow-sm"><UserPlus size={24}/></div>
