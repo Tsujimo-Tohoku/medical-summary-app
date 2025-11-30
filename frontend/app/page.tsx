@@ -1,13 +1,24 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-// 正しいパス: appフォルダの兄弟であるlibフォルダを参照
-import { supabase } from '../lib/supabaseClient'; 
+
+// ==========================================
+// ★STEP 1: 本番環境（VS Code）では、以下の3行のコメントアウト( // )を外してください
+// ==========================================
+import { supabase } from '../lib/supabaseClient';
 import Link from 'next/link';
-// アイコンライブラリ
+type LinkProps = any; // エラー回避用
+
+// ==========================================
+// ★STEP 2: 本番環境（VS Code）では、以下の「プレビュー用モック」ブロックをすべて削除またはコメントアウトしてください
+// ==========================================
+// --- [プレビュー用モック START] ---
+// --- [プレビュー用モック END] ---
+
+
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
-  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus
+  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus, User
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
@@ -25,13 +36,13 @@ const DICT = {
       title: "設定", lang: "言語", appearance: "表示設定", 
       fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ",
       family: "家族設定", 
+      profile: "プロフィール設定", // 追加
       account: "アカウント",
       fontLabels: { s: "小", m: "標準", l: "大" },
       themeLabels: { light: "ライト", dark: "ダーク" }
     },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
     recommend: "関連する診療科の例（参考）",
-    // 医師用ヘッダーは日本語固定
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
     disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
     login: "ログイン", logout: "ログアウト", history: "履歴",
@@ -48,6 +59,7 @@ const DICT = {
       title: "Settings", lang: "Language", appearance: "Appearance", 
       fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size",
       family: "Family Settings", 
+      profile: "Profile Settings", // 追加
       account: "Account",
       fontLabels: { s: "Small", m: "Medium", l: "Large" },
       themeLabels: { light: "Light", dark: "Dark" }
@@ -69,6 +81,7 @@ const DICT = {
       title: "设置", lang: "语言", appearance: "外观", 
       fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸",
       family: "家庭设置", 
+      profile: "个人资料设置", // 追加
       account: "帐户",
       fontLabels: { s: "小", m: "中", l: "大" },
       themeLabels: { light: "浅色", dark: "深色" }
@@ -90,6 +103,7 @@ const DICT = {
       title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", 
       fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF",
       family: "Cài đặt gia đình", 
+      profile: "Cài đặt hồ sơ", // 追加
       account: "Tài khoản",
       fontLabels: { s: "Nhỏ", m: "Vừa", l: "Lớn" },
       themeLabels: { light: "Sáng", dark: "Tối" }
@@ -346,6 +360,10 @@ export default function MedicalSummaryApp() {
                    ) : (
                       <Link href="/login" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-teal-600">{t.login}</Link>
                    )}
+                   {/* プロフィール設定リンク (追加) */}
+                   <Link href="/profile" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                     <User size={14}/> {t.settings.profile}
+                   </Link>
                    <Link href="/family" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2">
                      <Users size={14}/> {t.settings.family}
                    </Link>
