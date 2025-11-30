@@ -13,13 +13,12 @@ type LinkProps = any; // エラー回避用
 // ★STEP 2: 本番環境（VS Code）では、以下の「プレビュー用モック」ブロックをすべて削除またはコメントアウトしてください
 // ==========================================
 // --- [プレビュー用モック START] ---
-
 // --- [プレビュー用モック END] ---
 
 
 import { 
   ArrowLeft, Users, UserPlus, LogOut, Copy, Check, 
-  ShieldCheck, Loader2, AlertCircle, RefreshCw, Share2
+  ShieldCheck, Loader2, AlertCircle, RefreshCw, Share2, Clock
 } from 'lucide-react';
 
 interface Member {
@@ -31,7 +30,7 @@ interface Family {
   id: string;
   name: string;
   invite_code: string;
-  invite_code_created_at?: string; // 追加
+  invite_code_created_at?: string;
 }
 
 export default function FamilyPage() {
@@ -50,9 +49,10 @@ export default function FamilyPage() {
   const [generating, setGenerating] = useState(false);
   const [canShare, setCanShare] = useState(false);
 
-  // 有効期限計算用
+  // 有効期限表示用
   const [isExpired, setIsExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>("");
+  const [expiryTimeStr, setExpiryTimeStr] = useState<string>("");
 
   useEffect(() => {
     const init = async () => {
@@ -66,20 +66,25 @@ export default function FamilyPage() {
     };
     init();
 
-    // Web Share APIが使えるかチェック
     if (typeof navigator !== 'undefined' && (navigator as any).share) {
       setCanShare(true);
     }
   }, []);
 
-  // 有効期限のカウントダウンタイマー
+  // タイマー処理
   useEffect(() => {
     if (!family?.invite_code_created_at) return;
 
+    // 有効期限の絶対時刻を計算
+    const created = new Date(family.invite_code_created_at).getTime();
+    const expireTime = created + (30 * 60 * 1000); // 30分後
+    const expireDateObj = new Date(expireTime);
+    
+    // "14:30" のような形式で時刻を表示
+    setExpiryTimeStr(expireDateObj.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+
     const timer = setInterval(() => {
-      const created = new Date(family.invite_code_created_at!).getTime();
       const now = new Date().getTime();
-      const expireTime = created + (30 * 60 * 1000); // 30分
       const diff = expireTime - now;
 
       if (diff <= 0) {
@@ -177,7 +182,6 @@ export default function FamilyPage() {
     }
   };
 
-  // ★追加: 招待コード再発行
   const handleGenerateCode = async () => {
     if (!family) return;
     setGenerating(true);
@@ -192,11 +196,10 @@ export default function FamilyPage() {
 
       if (error) throw error;
 
-      // state更新
       const newFamily = { 
         ...family, 
         invite_code: data.code,
-        invite_code_created_at: new Date().toISOString() // 即時反映のため
+        invite_code_created_at: new Date().toISOString() 
       };
       setFamily(newFamily);
       setSuccessMsg("新しいコードを発行しました！");
@@ -236,13 +239,12 @@ export default function FamilyPage() {
     }
   };
 
-  // ★追加: シェア機能
   const shareInviteCode = async () => {
     if (!family?.invite_code) return;
     try {
       await (navigator as any).share({
         title: '家族招待コード',
-        text: `「Medical Summary App」の家族招待コードです。\nコード: ${family.invite_code}\n※30分間のみ有効です。\n\nアプリを開いて入力してください。`,
+        text: `「KarteNo」の家族招待コードです。\nコード: ${family.invite_code}\n有効期限: ${expiryTimeStr} まで\n\nアプリを開いて入力してください。`,
         url: window.location.origin
       });
     } catch (err) {
@@ -291,7 +293,6 @@ export default function FamilyPage() {
             )}
 
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center relative overflow-hidden">
-              {/* 背景装飾 */}
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-teal-400 to-blue-500"></div>
               
               <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -300,7 +301,6 @@ export default function FamilyPage() {
               <h2 className="text-xl font-bold mb-1 text-slate-800">{family.name}</h2>
               <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Family Group</span>
 
-              {/* 招待コードエリア */}
               <div className={`mt-6 p-6 rounded-xl border-2 border-dashed transition-colors ${isExpired ? 'bg-slate-50 border-slate-300' : 'bg-blue-50/50 border-blue-200'}`}>
                 {isExpired ? (
                   <div className="text-center">
@@ -316,10 +316,14 @@ export default function FamilyPage() {
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                      招待コード <span className="text-red-500 bg-red-50 px-2 py-0.5 rounded text-[10px]">{timeLeft}</span>
-                    </p>
-                    <div className="text-4xl font-mono font-bold tracking-widest text-slate-800 mb-4 select-all">
+                    <div className="flex flex-col items-center justify-center mb-4">
+                      <p className="text-xs text-slate-500 mb-1 font-bold uppercase tracking-widest">招待コード</p>
+                      <div className="flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 px-3 py-1 rounded-full">
+                        <Clock size={12} /> {timeLeft} ({expiryTimeStr}まで)
+                      </div>
+                    </div>
+                    
+                    <div className="text-4xl font-mono font-bold tracking-widest text-slate-800 mb-6 select-all">
                       {family.invite_code}
                     </div>
                     
@@ -379,30 +383,40 @@ export default function FamilyPage() {
             </div>
           </div>
         ) : (
-          // 未所属（変更なし）
           <div className="space-y-8 animate-fade-in">
-            {/* Create / Join Block (前回と同じ) */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            {/* Create Block */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-teal-100 p-2.5 rounded-xl text-teal-600"><Users size={24}/></div>
-                <div><h3 className="font-bold text-lg">新しく家族グループを作る</h3></div>
+                <div className="bg-teal-100 p-2.5 rounded-xl text-teal-600 shadow-sm"><Users size={24}/></div>
+                <div>
+                  <h3 className="font-bold text-lg">新しく家族グループを作る</h3>
+                  <p className="text-xs text-slate-400">あなたが代表者になります</p>
+                </div>
               </div>
               <div className="flex gap-2">
-                <input type="text" placeholder="家族の名前 (例: 田中家)" className="flex-1 border rounded-xl px-4 py-3 text-sm outline-none focus:border-teal-500 bg-slate-50 focus:bg-white" value={familyNameInput} onChange={(e) => setFamilyNameInput(e.target.value)} />
-                <button onClick={handleCreateFamily} disabled={!familyNameInput} className={`px-6 py-2 rounded-xl text-sm font-bold text-white transition ${!familyNameInput ? 'bg-slate-300' : 'bg-teal-600 hover:bg-teal-700'}`}>作成</button>
+                <input type="text" placeholder="家族の名前 (例: 田中家)" className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-teal-500 bg-slate-50 focus:bg-white" value={familyNameInput} onChange={(e) => setFamilyNameInput(e.target.value)} />
+                <button onClick={handleCreateFamily} disabled={!familyNameInput} className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-teal-600/20 transition-all ${!familyNameInput ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 hover:scale-105 active:scale-95'}`}>作成</button>
               </div>
             </div>
+
             <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-slate-200"></div><span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">OR</span><div className="flex-grow border-t border-slate-200"></div>
+              <div className="flex-grow border-t border-slate-200"></div>
+              <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-widest">OR</span>
+              <div className="flex-grow border-t border-slate-200"></div>
             </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+
+            {/* Join Block */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600"><UserPlus size={24}/></div>
-                <div><h3 className="font-bold text-lg">招待コードで参加する</h3></div>
+                <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600 shadow-sm"><UserPlus size={24}/></div>
+                <div>
+                  <h3 className="font-bold text-lg">招待コードで参加する</h3>
+                  <p className="text-xs text-slate-400">家族のグループに参加します</p>
+                </div>
               </div>
               <div className="flex gap-2">
-                <input type="text" placeholder="招待コード (例: A1B2...)" className="flex-1 border rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 bg-slate-50 focus:bg-white uppercase font-mono" value={inviteCodeInput} onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())} maxLength={8} />
-                <button onClick={handleJoinFamily} disabled={inviteCodeInput.length < 4} className={`px-6 py-2 rounded-xl text-sm font-bold text-white transition ${inviteCodeInput.length < 4 ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'}`}>参加</button>
+                <input type="text" placeholder="招待コード (例: A1B2...)" className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 bg-slate-50 focus:bg-white uppercase font-mono" value={inviteCodeInput} onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())} maxLength={8} />
+                <button onClick={handleJoinFamily} disabled={inviteCodeInput.length < 4} className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all ${inviteCodeInput.length < 4 ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'}`}>参加</button>
               </div>
             </div>
           </div>
