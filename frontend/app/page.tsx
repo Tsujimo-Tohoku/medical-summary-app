@@ -1,90 +1,81 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Metadata } from 'next';
-import { supabase } from '../lib/supabaseClient';
-import Link from 'next/link';
+// パスを修正: ../../lib... -> ../lib...
+import { supabase } from '../lib/supabaseClient'; 
 
+// --- Next.js Link Component Mock for Preview ---
+// 本番環境（Next.js）では以下のコメントアウトを解除し、下のconst Link定義を削除してください
+// import Link from 'next/link';
+const Link = ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>;
+// -----------------------------------------------
+
+// アイコンライブラリ: npm install lucide-react が必要です
+import { 
+  Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
+  LogOut, History, ShieldAlert, Activity, Stethoscope 
+} from 'lucide-react';
+
+// 環境変数からバックエンドURLを取得（設定がない場合はデフォルト値）
+// .env.local に NEXT_PUBLIC_BACKEND_URL=https://your-backend.onrender.com を設定推奨
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
+
+// --- 言語・設定データ ---
 const DICT = {
   ja: { 
-    label: "日本語", button: "医師に見せる画面を作成", loading: "AIがカルテを作成中...", copy: "コピー", copied: "完了", share: "LINE等で送る", pdf: "PDFで保存", explanationTitle: "患者様への確認メモ",
-    guideTitle: "このツールの使い方は？",
-    step1: "下の入力欄に、症状を書いてください。マイクボタンで音声入力も可能です。",
-    step2: "「医師に見せる画面を作成」ボタンを押します。",
-    step3: "整理されたサマリーが表示されます。そのまま医師に見せるか、Web問診票にコピーしてください。",
-    settings: { title: "設定", lang: "言語", appearance: "表示設定", fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ" },
+    label: "日本語", button: "カルテ用サマリーを作成", loading: "AIが専門用語に変換中...", 
+    copy: "コピー", copied: "完了", share: "共有", pdf: "PDF保存", explanationTitle: "AIからの補足メモ",
+    guideTitle: "ご利用ガイド",
+    step1: "症状を具体的にお話しください",
+    step2: "AIが医学用語に変換・整理します",
+    step3: "医師にスマホ画面を見せてください",
+    settings: { title: "設定", lang: "言語", appearance: "表示", fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDF用紙" },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
-    recommend: "関連する診療科の例（参考）",
+    recommend: "関連する診療科（参考）",
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
-    disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
-    login: "ログイン", logout: "ログアウト", history: "履歴"
+    disclaimer: "本結果はAIによる生成です。診断ではありません。必ず医師の診察を受けてください。",
+    login: "ログイン", logout: "ログアウト", history: "履歴",
+    adTitle: "ご家族の安心のために"
   },
   en: { 
-    label: "English", button: "Create Medical Summary", loading: "AI is thinking...", copy: "Copy", copied: "Copied", share: "Share", pdf: "Save as PDF", explanationTitle: "Note for you",
-    guideTitle: "How to use this tool?",
-    step1: "Describe your symptoms below. You can also use voice input.",
-    step2: "Tap 'Create Medical Summary'.",
-    step3: "Show the summary to your doctor.",
+    label: "English", button: "Create Summary", loading: "Processing...", 
+    copy: "Copy", copied: "Copied", share: "Share", pdf: "Save PDF", explanationTitle: "AI Note",
+    guideTitle: "How to use", step1: "Describe symptoms", step2: "AI processes text", step3: "Show to doctor",
     settings: { title: "Settings", lang: "Language", appearance: "Appearance", fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size" },
-    placeholder: "(Ex) I have a throbbing pain in my right stomach since last night...",
-    recommend: "Related Departments (Ref)",
-    headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
-    disclaimer: "* This is AI-generated text, not a medical diagnosis. Please consult a doctor.",
-    login: "Login", logout: "Logout", history: "History"
-  },
-  zh: { 
-    label: "中文", button: "生成病历摘要", loading: "AI正在思考...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认",
-    guideTitle: "如何使用？",
-    step1: "在下方描述您的症状。也可以使用语音输入。",
-    step2: "点击“生成病历摘要”。",
-    step3: "向医生展示摘要。",
-    settings: { title: "设置", lang: "语言", appearance: "外观", fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸" },
-    placeholder: "（例）从昨天晚上开始右腹部疼痛...",
-    recommend: "相关科室示例（参考）",
-    headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" },
-    disclaimer: "※此结果由AI生成，非医生诊断。仅供参考，请务必就医。",
-    login: "登录", logout: "登出", history: "历史记录"
-  },
-  vi: { 
-    label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang suy nghĩ...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn",
-    guideTitle: "Cách sử dụng?",
-    step1: "Mô tả triệu chứng bên dưới. Có thể dùng giọng nói.",
-    step2: "Nhấn nút 'Tạo tóm tắt'.",
-    step3: "Đưa bản tóm tắt cho bác sĩ.",
-    settings: { title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF" },
-    placeholder: "(Ví dụ) Tôi bị đau bụng bên phải từ tối qua...",
-    recommend: "Các khoa liên quan (Tham khảo)",
-    headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" },
-    disclaimer: "* Đây là văn bản do AI tạo ra, không phải chẩn đoán y tế. Vui lòng tham khảo ý kiến bác sĩ.",
-    login: "Đăng nhập", logout: "Đăng xuất", history: "Lịch sử"
-  },
+    placeholder: "(Ex) I have a throbbing pain in my right stomach...",
+    recommend: "Related Depts",
+    headers: { cc: "Chief Complaint", history: "HPI", symptoms: "Symptoms", background: "History/Meds" },
+    disclaimer: "AI generated. Not a diagnosis. Consult a doctor.",
+    login: "Login", logout: "Logout", history: "History",
+    adTitle: "Recommended Services"
+  }
 };
 
-type LangKey = keyof typeof DICT;
+type LangKey = 'ja' | 'en';
 type Theme = 'light' | 'dark';
 type FontSize = 'small' | 'medium' | 'large';
 type PdfSize = 'A4' | 'B5' | 'Receipt';
 
-interface SummaryData {
-  chief_complaint: string;
-  history: string;
-  symptoms: string;
-  background: string;
-}
-
 interface AnalysisResult {
-  summary: SummaryData; 
+  summary: {
+    chief_complaint: string;
+    history: string;
+    symptoms: string;
+    background: string;
+  }; 
   departments?: string[];
   explanation?: string;
 }
 
-const FormattedText = ({ text, className }: { text: string, className?: string }) => {
+// --- サブコンポーネント: 整形テキスト表示 ---
+const FormattedText = ({ text }: { text: string }) => {
   if (!text) return null;
   return (
-    <p className={`whitespace-pre-wrap leading-relaxed ${className}`}>
+    <p className="whitespace-pre-wrap leading-relaxed text-slate-700 dark:text-slate-300">
       {text.split(/(\*\*.*?\*\*)/).map((part, j) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={j} className="text-blue-700 dark:text-blue-300 font-bold">{part.slice(2, -2)}</strong>;
+          // 太字部分をTeal色で強調
+          return <strong key={j} className="text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/30 px-1 rounded">{part.slice(2, -2)}</strong>;
         }
         return part;
       })}
@@ -92,7 +83,21 @@ const FormattedText = ({ text, className }: { text: string, className?: string }
   );
 };
 
-export default function Home() {
+// --- サブコンポーネント: サマリーセクション ---
+const SummarySection = ({ title, content }: { title: string, content: string }) => (
+  <div className="mb-6 last:mb-0 group">
+    <h4 className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+      <span className="w-1 h-4 bg-teal-500 rounded-full"></span>
+      {title}
+    </h4>
+    <div className="pl-3 border-l-2 border-slate-100 dark:border-slate-800 group-hover:border-teal-100 transition-colors">
+      <FormattedText text={content} />
+    </div>
+  </div>
+);
+
+// --- メインコンポーネント ---
+export default function MedicalSummaryApp() {
   const [lang, setLang] = useState<LangKey>("ja");
   const [theme, setTheme] = useState<Theme>('light');
   const [fontSize, setFontSize] = useState<FontSize>('medium');
@@ -103,22 +108,22 @@ export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [canShare, setCanShare] = useState(false);
   
   const [user, setUser] = useState<any>(null);
-  const [saveStatus, setSaveStatus] = useState<string | null>(null); // 保存状態メッセージ
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
   
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
-  
   const settingsRef = useRef<HTMLDivElement>(null);
-  const t = DICT[lang];
+  const t = DICT[lang] || DICT.ja;
 
+  // 初期化処理: Auth監視 & テーマ設定
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && (navigator as any).share) {
-      setCanShare(true);
+    // OSのダークモード設定を反映
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
     }
-    
+
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
@@ -135,26 +140,26 @@ export default function Home() {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       subscription.unsubscribe();
     };
   }, []);
 
+  // 音声入力処理 (Web Speech API)
   const toggleRecording = useCallback(() => {
     if (isRecording) {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      recognitionRef.current?.stop();
       setIsRecording(false);
       return;
     }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("お使いのブラウザは音声入力に対応していません / Voice input not supported");
+      alert("このブラウザは音声入力に対応していません。");
       return;
     }
     const recognition = new SpeechRecognition();
-    recognition.lang = lang === 'ja' ? 'ja-JP' : lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'vi-VN';
+    recognition.lang = lang === 'ja' ? 'ja-JP' : 'en-US';
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onresult = (event: any) => {
@@ -164,84 +169,59 @@ export default function Home() {
           finalTranscript += event.results[i][0].transcript;
         }
       }
-      if (finalTranscript) {
-        setInputText(prev => prev + (prev ? '\n' : '') + finalTranscript);
-      }
+      if (finalTranscript) setInputText(prev => prev + (prev ? '\n' : '') + finalTranscript);
     };
-    recognition.onerror = (event: any) => {
-      console.error(event.error);
-      setIsRecording(false);
-    };
+    recognition.onerror = () => setIsRecording(false);
     recognitionRef.current = recognition;
     recognition.start();
     setIsRecording(true);
   }, [isRecording, lang]);
 
-  const getTextSizeClass = () => {
-    switch(fontSize) {
-      case 'small': return 'text-sm';
-      case 'large': return 'text-lg';
-      default: return 'text-base';
-    }
-  };
-
-  // ★修正: 分析完了後にSupabaseへ保存する処理を追加
+  // AI解析リクエスト
   const handleAnalyze = async () => {
-    if (!inputText) return;
+    if (!inputText.trim()) return;
     setIsLoading(true);
     setResult(null);
-    setSaveStatus(null); // リセット
+    setSaveStatus(null);
+    if (isRecording) toggleRecording();
 
-    if (isRecording && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    }
     try {
-      const response = await fetch("https://medical-backend-92rr.onrender.com/analyze", {
+      const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: inputText, language: t.label }),
       });
+      if (!response.ok) throw new Error("API Error");
+      
       const data: AnalysisResult = await response.json();
-      setResult(data); 
+      setResult(data);
 
-      // ログイン済みなら履歴に保存
+      // ログイン済みなら履歴保存
       if (user) {
-        try {
-          const { error } = await supabase.from('summaries').insert({
-            user_id: user.id,
-            content: JSON.stringify(data.summary), // 構造化データを文字列として保存
-            departments: JSON.stringify(data.departments || []) // 診療科も保存
-          });
-          if (error) throw error;
-          setSaveStatus("✅ 履歴に保存しました");
-        } catch (dbError) {
-          console.error("Save error:", dbError);
-          setSaveStatus("⚠️ 履歴保存に失敗しました");
-        }
+        const { error } = await supabase.from('summaries').insert({
+          user_id: user.id,
+          content: JSON.stringify(data.summary),
+          departments: JSON.stringify(data.departments || [])
+        });
+        setSaveStatus(error ? "保存失敗" : "履歴に保存済");
       }
-
     } catch (error) {
       console.error(error);
-      alert("エラーが発生しました / Error occurred");
+      alert("解析に失敗しました。しばらく待ってから再試行してください。");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ... (PDF, Copy, Share functions are same as before)
-  const createFormattedSummaryText = (summary: SummaryData) => {
-    return `■ ${t.headers.cc}\n${summary.chief_complaint}\n\n■ ${t.headers.history}\n${summary.history}\n\n■ ${t.headers.symptoms}\n${summary.symptoms}\n\n■ ${t.headers.background}\n${summary.background}`;
-  };
-
+  // PDFダウンロード
   const handleDownloadPDF = async () => {
     if (!result) return;
     try {
-      const fullText = createFormattedSummaryText(result.summary);
-      const response = await fetch("https://medical-backend-92rr.onrender.com/pdf", {
+      const fullText = `■ ${t.headers.cc}\n${result.summary.chief_complaint}\n\n■ ${t.headers.history}\n${result.summary.history}\n\n■ ${t.headers.symptoms}\n${result.summary.symptoms}\n\n■ ${t.headers.background}\n${result.summary.background}`;
+      const response = await fetch(`${BACKEND_URL}/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: fullText, pdf_size: pdfSize }), 
+        body: JSON.stringify({ text: fullText, pdf_size: pdfSize }),
       });
       if (!response.ok) throw new Error("PDF Error");
       const blob = await response.blob();
@@ -252,141 +232,66 @@ export default function Home() {
       document.body.appendChild(a);
       a.click();
       a.remove();
-    } catch (error) {
-      alert("PDF Error");
-    }
+    } catch (e) { alert("PDF作成エラー"); }
   };
 
+  // テキストコピー
   const handleCopy = () => {
     if (!result) return;
-    const textToCopy = createFormattedSummaryText(result.summary).replace(/\*\*/g, ""); 
+    const textToCopy = `【主訴】${result.summary.chief_complaint}\n【現病歴】${result.summary.history}\n【随伴症状】${result.summary.symptoms}\n【既往歴】${result.summary.background}`.replace(/\*\*/g, "");
     navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleShare = async () => {
-    if (!result) return;
-    try {
-      await (navigator as any).share({
-        title: 'Medical Summary',
-        text: createFormattedSummaryText(result.summary).replace(/\*\*/g, ""),
-      });
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
-  const mainClass = `min-h-screen font-sans pb-32 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`;
-  const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-colors duration-300 relative ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`;
-  const inputClass = `w-full h-48 p-4 rounded-xl outline-none resize-none transition-all ${getTextSizeClass()} ${theme === 'dark' ? 'bg-slate-900 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-blue-500' : 'bg-slate-50 border border-slate-200 text-slate-700 focus:ring-2 focus:ring-blue-500'}`;
-  const headerClass = `border-b sticky top-0 z-10 shadow-sm transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`;
-
-  const SummarySection = ({ title, content }: { title: string, content: string }) => (
-    <div className="mb-6 last:mb-0">
-      <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2 border-l-4 border-blue-500 pl-2">
-        {title}
-      </h4>
-      <div className={`pl-3 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-        <FormattedText text={content} />
-      </div>
-    </div>
-  );
-
+  // UIスタイル定義
+  const containerClass = `min-h-screen font-sans transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`;
+  const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
+  
   return (
-    <div className={mainClass}>
-      <header className={headerClass}>
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+    <div className={containerClass}>
+      {/* Header */}
+      <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
+        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">AI</div>
-            <h1 className="text-xl font-bold tracking-tight hidden sm:block">
-              Medical Summary <span className="text-blue-600 dark:text-blue-400">Assistant</span>
+            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-teal-600/20">
+              <Activity size={18} />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight">
+              Medical <span className="text-teal-600">Note</span>
             </h1>
-            <h1 className="text-lg font-bold tracking-tight sm:hidden">Medical AI</h1>
           </div>
           
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                {/* ★追加: 履歴ページへのリンク */}
-                <Link 
-                  href="/history"
-                  className={`text-sm font-bold px-3 py-1.5 rounded-lg border transition hidden sm:block ${theme === 'dark' ? 'border-slate-600 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}
-                >
-                  {t.history}
+                <Link href="/history" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition text-slate-500">
+                  <History size={20} />
                 </Link>
-                <button 
-                  onClick={handleLogout}
-                  className={`text-sm font-bold px-3 py-1.5 rounded-lg border transition ${theme === 'dark' ? 'border-slate-600 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'}`}
-                >
-                  {t.logout}
-                </button>
               </>
             ) : (
-              <Link 
-                href="/login"
-                className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition"
-              >
+              <Link href="/login" className="text-sm font-bold text-teal-600 hover:text-teal-700">
                 {t.login}
               </Link>
             )}
 
             <div className="relative" ref={settingsRef}>
-              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`} aria-label="Settings">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition">
+                <Settings size={20} />
               </button>
+              
+              {/* Settings Dropdown */}
               {isSettingsOpen && (
-                <div className={`absolute right-0 mt-2 w-64 rounded-lg shadow-xl border py-2 z-50 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                {/* アカウント設定セクション */}
-                <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Account</div>
-                <Link href="/profile" className={`block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-                  👤 プロフィール設定
-                </Link>
-                {/* ★追加: 家族設定へのリンク */}
-                <Link href="/family" className={`block w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-                  👨‍👩‍👧‍👦 家族設定
-                </Link>
-                <div className={`border-t my-2 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}></div>
-
-                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{t.settings.lang}</div>
-                  <div className="grid grid-cols-2 gap-1 px-2">
-                    {(['ja', 'en', 'zh', 'vi'] as LangKey[]).map((l) => (
-                      <button key={l} onClick={() => setLang(l)} className={`text-sm px-2 py-1.5 rounded ${lang === l ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                        {l === 'ja' ? '🇯🇵' : l === 'en' ? '🇺🇸' : l === 'zh' ? '🇨🇳' : '🇻🇳'} {l.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                  <div className={`border-t my-2 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}></div>
-                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{t.settings.appearance}</div>
-                  <div className="px-4 py-1 flex items-center justify-between">
-                    <span className="text-sm">{t.settings.fontSize}</span>
-                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded p-1">
-                      <button onClick={() => setFontSize('small')} className={`px-2 py-0.5 text-xs rounded ${fontSize === 'small' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>A-</button>
-                      <button onClick={() => setFontSize('medium')} className={`px-2 py-0.5 text-xs rounded ${fontSize === 'medium' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>A</button>
-                      <button onClick={() => setFontSize('large')} className={`px-2 py-0.5 text-xs rounded ${fontSize === 'large' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>A+</button>
-                    </div>
-                  </div>
-                  <div className="px-4 py-1 flex items-center justify-between">
-                    <span className="text-sm">{t.settings.theme}</span>
-                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded p-1">
-                      <button onClick={() => setTheme('light')} className={`px-2 py-0.5 text-xs rounded ${theme === 'light' ? 'bg-white shadow text-yellow-600' : ''}`}>☀️</button>
-                      <button onClick={() => setTheme('dark')} className={`px-2 py-0.5 text-xs rounded ${theme === 'dark' ? 'bg-slate-600 shadow text-purple-300' : ''}`}>🌙</button>
-                    </div>
-                  </div>
-                  <div className={`border-t my-2 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}></div>
-                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{t.settings.pdfSize}</div>
-                  <div className="px-4 pb-2 flex gap-2">
-                    {(['A4', 'B5', 'Receipt'] as PdfSize[]).map((s) => (
-                      <button key={s} onClick={() => setPdfSize(s)} className={`text-xs px-2 py-1 border rounded ${pdfSize === s ? 'border-blue-500 text-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-300 dark:border-slate-600'}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
+                <div className={`absolute right-0 mt-2 w-64 rounded-xl shadow-xl border py-2 z-50 animate-fade-in ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                   <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">Account</div>
+                   {user && <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-red-500"><LogOut size={14}/> {t.logout}</button>}
+                   
+                   <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
+                   <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">Theme</div>
+                   <div className="flex gap-2 px-4">
+                     <button onClick={() => setTheme('light')} className={`flex-1 py-1 text-xs border rounded ${theme === 'light' ? 'bg-slate-100 border-slate-300' : 'border-slate-700'}`}>Light</button>
+                     <button onClick={() => setTheme('dark')} className={`flex-1 py-1 text-xs border rounded ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'border-slate-200'}`}>Dark</button>
+                   </div>
                 </div>
               )}
             </div>
@@ -394,149 +299,148 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 py-8">
         
-        {/* 使い方ガイド (省略なし) */}
-        <div className="mb-8">
-          <details className={`group border rounded-xl shadow-sm open:shadow-md transition-all duration-200 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
-            <summary className="flex items-center justify-between p-4 cursor-pointer list-none font-bold select-none">
-              <span className="flex items-center gap-2">
-                <span className="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">?</span>
-                {t.guideTitle}
-              </span>
-              <span className="transition-transform group-open:rotate-180 opacity-50">▼</span>
-            </summary>
-            <div className={`px-4 pb-6 pt-2 border-t text-sm space-y-3 ${theme === 'dark' ? 'border-slate-700 text-slate-300' : 'border-slate-50 text-slate-600'}`}>
-              <div className="flex items-start gap-3">
-                <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded flex-shrink-0">STEP 1</span>
+        {/* Intro / Guide */}
+        {!result && (
+          <div className="mb-8 text-center animate-fade-in">
+            <h2 className="text-2xl font-bold mb-2">医師への「伝え方」をサポート</h2>
+            <p className="text-slate-500 text-sm">AIがあなたの症状を医学的な要約（サマリー）に変換します。</p>
+            
+            <div className="grid grid-cols-3 gap-4 mt-6 text-xs text-slate-500">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-teal-600"><Mic size={18} /></div>
                 <p>{t.step1}</p>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded flex-shrink-0">STEP 2</span>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-teal-600"><Activity size={18} /></div>
                 <p>{t.step2}</p>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded flex-shrink-0">STEP 3</span>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-teal-600"><FileText size={18} /></div>
                 <p>{t.step3}</p>
               </div>
             </div>
-          </details>
-        </div>
+          </div>
+        )}
 
-        <div className={cardClass}>
+        {/* Input Area */}
+        <div className={`${cardClass} transition-all ${result ? 'border-teal-500/30 ring-1 ring-teal-500/30' : ''}`}>
           <textarea
-            className={inputClass}
+            className={`w-full h-40 bg-transparent resize-none outline-none text-lg leading-relaxed placeholder:text-slate-300 dark:placeholder:text-slate-700 ${fontSize === 'large' ? 'text-xl' : 'text-base'}`}
             placeholder={t.placeholder}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
           />
-          <button 
-            onClick={toggleRecording}
-            className={`absolute bottom-24 right-8 p-3 rounded-full shadow-lg transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
-            title="音声入力"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-          </button>
-          <button
-            onClick={handleAnalyze} disabled={isLoading || !inputText}
-            className={`mt-4 w-full py-4 px-6 rounded-xl font-bold text-white text-lg shadow-lg flex items-center justify-center gap-2 transition-all ${isLoading || !inputText ? "bg-slate-300 dark:bg-slate-700" : "bg-blue-600 hover:bg-blue-700"}`}
-          >
-            {isLoading ? t.loading : `✨ ${t.button}`}
-          </button>
+          
+          <div className="flex items-center justify-between mt-4">
+            <button 
+              onClick={toggleRecording}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${isRecording ? 'bg-red-50 text-red-600 ring-2 ring-red-500 ring-offset-2' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200'}`}
+            >
+              {isRecording ? <><MicOff size={16} className="animate-pulse" /> 録音中...</> : <><Mic size={16} /> 音声入力</>}
+            </button>
+
+            <button
+              onClick={handleAnalyze} disabled={isLoading || !inputText}
+              className={`px-6 py-2 rounded-full font-bold text-white shadow-lg shadow-teal-600/20 transition-all flex items-center gap-2 ${isLoading || !inputText ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-teal-600 hover:bg-teal-700 hover:scale-105 active:scale-95"}`}
+            >
+              {isLoading ? t.loading : <>{t.button} <Stethoscope size={18} /></>}
+            </button>
+          </div>
         </div>
 
-        {/* 結果表示エリア */}
+        {/* Result Area */}
         {result && (
-          <div className="animate-fade-in-up space-y-6">
+          <div className="animate-fade-in space-y-6">
             
-            {/* 保存成功メッセージ */}
+            {/* Status Bar */}
             {saveStatus && (
-              <div className={`p-4 rounded-lg font-bold text-center ${saveStatus.includes("失敗") ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>
-                {saveStatus}
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-teal-600 bg-teal-50 dark:bg-teal-900/20 py-2 rounded-lg">
+                <Check size={14} /> {saveStatus}
               </div>
             )}
 
-            <div className={`rounded-2xl shadow-lg border-2 overflow-hidden ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-blue-100'}`}>
-              <div className={`px-6 py-4 border-b flex items-center justify-between ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-blue-50 border-blue-100'}`}>
-                <h3 className={`font-bold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-800'}`}>✅ {t.settings.lang === '言語' ? '医師提示用' : 'Summary'}</h3>
+            <div className={`rounded-2xl overflow-hidden border shadow-lg ${theme === 'dark' ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-teal-900/5'}`}>
+              <div className="bg-gradient-to-r from-teal-600 to-teal-700 p-4 text-white flex items-center justify-between">
+                <h3 className="font-bold flex items-center gap-2"><FileText size={18}/> 医師提示用サマリー</h3>
                 <div className="flex gap-2">
-                  <button onClick={handleCopy} className={`text-xs border px-3 py-1.5 rounded-lg font-bold transition ${theme === 'dark' ? 'bg-slate-800 border-slate-600 text-blue-300 hover:bg-slate-700' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
-                    {isCopied ? t.copied : t.copy}
+                  <button onClick={handleCopy} className="p-2 hover:bg-white/20 rounded-lg transition" title={t.copy}>
+                    {isCopied ? <Check size={18}/> : <Copy size={18}/>}
                   </button>
-                  {canShare && (
-                    <button onClick={handleShare} className={`text-xs border px-3 py-1.5 rounded-lg font-bold transition ${theme === 'dark' ? 'bg-slate-800 border-slate-600 text-blue-300 hover:bg-slate-700' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
-                      {t.share}
-                    </button>
-                  )}
+                  <button onClick={handleDownloadPDF} className="p-2 hover:bg-white/20 rounded-lg transition" title={t.pdf}>
+                    <Share2 size={18}/>
+                  </button>
                 </div>
               </div>
-              
-              <div className={`p-6 ${getTextSizeClass()}`}>
-                
-                {result.departments && result.departments.length > 0 && (
-                  <div className="mb-6">
-                    <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                      {t.recommend}
-                    </span>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {result.departments.map((dept, i) => (
-                        <span key={i} className={`px-3 py-1 rounded-full text-sm font-bold border ${theme === 'dark' ? 'bg-slate-700 border-slate-600 text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
-                          {dept}
-                        </span>
-                      ))}
-                    </div>
+
+              <div className="p-6 sm:p-8">
+                {/* 診療科タグ */}
+                {result.departments && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {result.departments.map((dept, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                        {dept}
+                      </span>
+                    ))}
                   </div>
                 )}
-                
+
                 <SummarySection title={t.headers.cc} content={result.summary.chief_complaint} />
                 <SummarySection title={t.headers.history} content={result.summary.history} />
                 <SummarySection title={t.headers.symptoms} content={result.summary.symptoms} />
                 <SummarySection title={t.headers.background} content={result.summary.background} />
 
-                <div className={`mt-6 p-3 rounded-lg text-xs leading-relaxed flex gap-2 ${theme === 'dark' ? 'bg-red-900/20 text-red-300' : 'bg-red-50 text-red-600'}`}>
-                  <span className="font-bold">⚠️</span>
-                  {t.disclaimer}
+                <div className="mt-8 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 rounded-lg flex gap-3 text-xs text-amber-800 dark:text-amber-400">
+                  <ShieldAlert size={24} className="flex-shrink-0" />
+                  <p>{t.disclaimer}</p>
                 </div>
-              </div>
-              
-              <div className={`px-6 py-4 border-t ${theme === 'dark' ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-100'}`}>
-                <button onClick={handleDownloadPDF} className={`w-full py-3 border font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2 ${theme === 'dark' ? 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
-                  📄 {t.pdf} ({pdfSize})
-                </button>
               </div>
             </div>
 
-            {result.explanation && result.explanation.trim() !== "" && (
-              <div className={`rounded-xl border p-6 ${theme === 'dark' ? 'bg-amber-900/30 border-amber-800' : 'bg-amber-50 border-amber-200'}`}>
-                <h3 className={`font-bold mb-2 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-800'}`}>💡 {t.explanationTitle}</h3>
-                <p className={`text-sm leading-relaxed whitespace-pre-wrap ${theme === 'dark' ? 'text-amber-200' : 'text-amber-900'}`}>
+            {/* AI Explanation */}
+            {result.explanation && (
+              <div className="p-6 rounded-2xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                <h3 className="font-bold text-sm text-slate-500 mb-3 flex items-center gap-2">
+                  💡 {t.explanationTitle}
+                </h3>
+                <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                   {result.explanation}
                 </p>
               </div>
             )}
+
+            {/* Native Ads Area: 結果表示後に自然に配置 */}
+            <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800">
+              <h4 className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
+                {t.adTitle}
+              </h4>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {/* 広告スロット1: ここにアフィリエイトリンク等を設置 */}
+                <a href="#" className="block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-teal-500 transition-colors group">
+                  <div className="font-bold text-slate-700 dark:text-slate-300 text-sm mb-1 group-hover:text-teal-600">見守りサービス</div>
+                  <p className="text-xs text-slate-500">離れて暮らすご家族の通院状況を共有。安心を届けます。</p>
+                </a>
+                {/* 広告スロット2 */}
+                <a href="#" className="block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-teal-500 transition-colors group">
+                  <div className="font-bold text-slate-700 dark:text-slate-300 text-sm mb-1 group-hover:text-teal-600">宅食サービス</div>
+                  <p className="text-xs text-slate-500">健康的な食事をご自宅へお届け。塩分控えめメニューも。</p>
+                </a>
+              </div>
+            </div>
+
           </div>
         )}
       </main>
 
-      <footer className={`border-t py-8 text-center text-sm mt-12 ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-500'}`}>
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="flex justify-center gap-6 mb-4">
-            <a href="/privacy" className="hover:text-blue-600 transition">Privacy</a>
-            <a href="#" className="hover:text-blue-600 transition">Terms</a>
-            <a href="/about" className="hover:text-blue-600 transition">Contact / About</a>
-          </div>
-          <p>© 2025 Medical Summary Assistant.</p>
+      {/* Footer: リンクのみシンプルに */}
+      <footer className="py-8 text-center text-xs text-slate-400">
+        <div className="flex justify-center gap-6 mb-2">
+          <Link href="/privacy" className="hover:text-teal-600 transition">Privacy</Link>
+          <Link href="/terms" className="hover:text-teal-600 transition">Terms</Link>
         </div>
+        <p>© 2025 Medical Note.</p>
       </footer>
-      
-      <div className={`fixed bottom-0 left-0 w-full backdrop-blur-sm border-t p-2 z-50 flex justify-center ${theme === 'dark' ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className={`w-[320px] h-[50px] flex items-center justify-center text-xs rounded border ${theme === 'dark' ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
-          Ads Area
-        </div>
-      </div>
-      
-      <div className="h-24"></div> 
     </div>
   );
 }
