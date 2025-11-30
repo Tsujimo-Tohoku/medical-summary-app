@@ -1,31 +1,37 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+
+// ==========================================
+// ★STEP 1: 本番環境（VS Code）では、以下の3行のコメントアウト( // )を外してください
+// ==========================================
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
+type LinkProps = any; // エラー回避用
+
+// ==========================================
+// ★STEP 2: 本番環境（VS Code）では、以下の「プレビュー用モック」ブロックをすべて削除またはコメントアウトしてください
+// ==========================================
+// --- [プレビュー用モック START] ---
+
+// --- [プレビュー用モック END] ---
+
+
 import { 
   ArrowLeft, Users, UserPlus, LogOut, Copy, Check, 
-  ShieldCheck, Loader2 
+  ShieldCheck, Loader2, AlertCircle
 } from 'lucide-react';
 
 // 型定義
-interface Profile {
-  id: string;
-  email: string;
+interface Member {
+  user_id: string;
+  role: string;
 }
 
 interface Family {
   id: string;
   name: string;
   invite_code: string;
-}
-
-interface Member {
-  user_id: string;
-  role: string;
-  profiles?: {
-    email: string; // 本来はnickname推奨だが、今はemailを表示
-  };
 }
 
 export default function FamilyPage() {
@@ -40,7 +46,6 @@ export default function FamilyPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 初期データ読み込み
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -54,22 +59,21 @@ export default function FamilyPage() {
     init();
   }, []);
 
-  // 家族所属状況の取得
+  // 家族の所属状況を確認する関数
   const fetchFamilyStatus = async (userId: string) => {
     try {
-      // 1. 所属している家族IDを取得
+      // 1. 自分が所属している家族IDを探す
       const { data: memberData, error: memberError } = await supabase
         .from('family_members')
         .select('family_id, role')
         .eq('user_id', userId)
         .single();
 
-      if (memberError && memberError.code !== 'PGRST116') { // PGRST116は「データなし」
-        throw memberError;
-      }
+      // データがない(PGRST116)＝まだ家族に入っていない（正常）
+      if (memberError && memberError.code !== 'PGRST116') throw memberError;
 
       if (memberData) {
-        // 2. 家族詳細を取得
+        // 2. 家族の詳細情報を取得
         const { data: familyData } = await supabase
           .from('families')
           .select('*')
@@ -78,16 +82,12 @@ export default function FamilyPage() {
         
         if (familyData) {
           setFamily(familyData);
-          // 3. メンバー一覧を取得
-          // ※ profilesテーブルとの結合は、Supabase側で外部キー設定が必要だが
-          // 今回は簡易的にuser_idのみ、または別途profilesを取得する設計にする
-          // (ここでは簡易化のためemail表示はauth情報に依存できないので、IDのみ表示か、別途取得)
-          // 今回はRLSの範囲内で取得できる情報のみ表示
+          // 3. 同じ家族のメンバー一覧を取得
           const { data: membersData } = await supabase
             .from('family_members')
             .select('*')
             .eq('family_id', familyData.id);
-            
+          // @ts-ignore
           setMembers(membersData || []);
         }
       }
@@ -98,52 +98,40 @@ export default function FamilyPage() {
     }
   };
 
-  // 家族を作成する
+  // ★重要: RPC関数を使って安全に家族を作成する
+  // これにより「作成者本人」も自動的にオーナーとして登録される
   const handleCreateFamily = async () => {
     if (!familyNameInput.trim()) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // ランダムな8桁の招待コード生成
-      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-      // 1. Familiesテーブルに作成
-      const { data: newFamily, error: createError } = await supabase
-        .from('families')
-        .insert({ name: familyNameInput, invite_code: inviteCode })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-
-      // 2. FamilyMembersに自分を追加 (Owner)
-      const { error: joinError } = await supabase
-        .from('family_members')
-        .insert({
-          family_id: newFamily.id,
-          user_id: user.id,
-          role: 'owner'
+      // Supabase側で定義した create_family_with_owner 関数を呼び出す
+      const { data, error } = await supabase
+        .rpc('create_family_with_owner', { 
+          family_name: familyNameInput 
         });
 
-      if (joinError) throw joinError;
+      if (error) throw error;
 
+      // 成功したら画面を再読み込みして最新状態にする
       await fetchFamilyStatus(user.id);
 
     } catch (e: any) {
-      setErrorMsg("家族の作成に失敗しました: " + e.message);
+      console.error(e);
+      setErrorMsg("家族の作成に失敗しました: " + (e.message || "Unknown error"));
       setLoading(false);
     }
   };
 
-  // 招待コードで参加する
+  // 招待コードを使って既存の家族に参加する
   const handleJoinFamily = async () => {
     if (!inviteCodeInput.trim()) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // 1. コードから家族を検索
+      // 1. 招待コードから家族IDを特定
       const { data: targetFamily, error: searchError } = await supabase
         .from('families')
         .select('id')
@@ -151,10 +139,10 @@ export default function FamilyPage() {
         .single();
 
       if (searchError || !targetFamily) {
-        throw new Error("招待コードが見つかりません");
+        throw new Error("招待コードが見つかりません。コードを確認してください。");
       }
 
-      // 2. メンバーに追加
+      // 2. 自分をメンバーに追加
       const { error: joinError } = await supabase
         .from('family_members')
         .insert({
@@ -173,15 +161,15 @@ export default function FamilyPage() {
     }
   };
 
-  // 家族から脱退する
+  // 家族から抜ける処理
   const handleLeaveFamily = async () => {
-    if (!confirm("本当にこの家族グループから抜けますか？履歴の共有ができなくなります。")) return;
+    if (!confirm("本当にこの家族グループから抜けますか？")) return;
     setLoading(true);
     try {
       const { error } = await supabase
         .from('family_members')
         .delete()
-        .eq('user_id', user.id); // RLSにより自分のレコードのみ削除可能
+        .eq('user_id', user.id);
 
       if (error) throw error;
       
@@ -194,7 +182,6 @@ export default function FamilyPage() {
     }
   };
 
-  // 招待コードコピー
   const copyInviteCode = () => {
     if (family?.invite_code) {
       navigator.clipboard.writeText(family.invite_code);
@@ -205,9 +192,9 @@ export default function FamilyPage() {
 
   if (!user && !loading) {
     return (
-      <div className="min-h-screen p-8 text-center">
-        <p className="mb-4">ログインが必要です</p>
-        <Link href="/login" className="text-teal-600 font-bold">ログイン画面へ</Link>
+      <div className="min-h-screen p-8 text-center bg-slate-50">
+        <p className="mb-4 text-slate-600">ログインが必要です</p>
+        <Link href="/login" className="text-teal-600 font-bold hover:underline">ログイン画面へ</Link>
       </div>
     );
   }
@@ -227,49 +214,52 @@ export default function FamilyPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" /></div>
+          <div className="flex justify-center py-12"><Loader2 className="animate-spin text-teal-600 w-8 h-8" /></div>
         ) : errorMsg ? (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 text-sm font-bold">⚠️ {errorMsg}</div>
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 text-sm font-bold flex items-center gap-2">
+            <AlertCircle size={20} />
+            {errorMsg}
+            <button onClick={() => setErrorMsg(null)} className="ml-auto text-xs underline">閉じる</button>
+          </div>
         ) : family ? (
           // --- 家族参加済みの場合 ---
           <div className="space-y-6 animate-fade-in">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm text-center">
-              <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users size={32} />
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+              <div className="w-20 h-20 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm">
+                <Users size={36} />
               </div>
-              <h2 className="text-xl font-bold mb-1">{family.name}</h2>
-              <p className="text-xs text-slate-400">Family Group</p>
+              <h2 className="text-2xl font-bold mb-1 text-slate-800">{family.name}</h2>
+              <span className="inline-block px-3 py-1 bg-teal-100 text-teal-700 text-xs font-bold rounded-full">Family Group</span>
 
-              <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-wider">招待コード</p>
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-2xl font-mono font-bold tracking-widest text-slate-800">{family.invite_code}</span>
-                  <button onClick={copyInviteCode} className="p-2 hover:bg-white rounded-full transition text-teal-600">
+              <div className="mt-8 p-6 bg-slate-50 rounded-xl border border-slate-200 dashed-border">
+                <p className="text-xs text-slate-500 mb-3 font-bold uppercase tracking-widest">招待コード</p>
+                <div className="flex items-center justify-center gap-4">
+                  <span className="text-3xl font-mono font-bold tracking-widest text-slate-800">{family.invite_code}</span>
+                  <button onClick={copyInviteCode} className="p-2 bg-white border hover:bg-slate-50 rounded-lg transition text-teal-600 shadow-sm active:scale-95">
                     {isCopied ? <Check size={20}/> : <Copy size={20}/>}
                   </button>
                 </div>
-                <p className="text-xs text-slate-400 mt-2">このコードを家族に伝えて入力してもらってください</p>
+                <p className="text-xs text-slate-400 mt-3">このコードを家族に伝えて入力してもらってください</p>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b bg-slate-50 flex items-center gap-2">
-                <ShieldCheck size={16} className="text-teal-600"/>
+                <ShieldCheck size={18} className="text-teal-600"/>
                 <h3 className="text-sm font-bold text-slate-600">参加メンバー ({members.length})</h3>
               </div>
-              <div className="divide-y">
+              <div className="divide-y divide-slate-100">
                 {members.map((m) => (
-                  <div key={m.user_id} className="px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
+                  <div key={m.user_id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center text-slate-600 font-bold shadow-inner">
                         {m.user_id.substring(0, 1).toUpperCase()}
                       </div>
                       <div>
-                        {/* 本来はProfilesテーブルから名前を引くべきだが今回はIDで代用 */}
                         <p className="text-sm font-bold text-slate-700">
-                          {m.user_id === user.id ? "あなた" : `User ${m.user_id.substring(0, 4)}...`}
+                          {m.user_id === user.id ? "あなた (Me)" : `User ${m.user_id.substring(0, 4)}...`}
                         </p>
-                        <p className="text-xs text-slate-400 capitalize">{m.role}</p>
+                        <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{m.role}</p>
                       </div>
                     </div>
                   </div>
@@ -277,36 +267,39 @@ export default function FamilyPage() {
               </div>
             </div>
 
-            <div className="pt-6 border-t">
+            <div className="pt-4">
               <button 
                 onClick={handleLeaveFamily}
-                className="w-full py-3 border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 transition flex items-center justify-center gap-2"
+                className="w-full py-4 text-slate-400 text-sm font-bold hover:text-red-600 transition flex items-center justify-center gap-2 hover:bg-red-50 rounded-xl"
               >
-                <LogOut size={16} /> この家族から抜ける
+                <LogOut size={16} /> この家族グループから抜ける
               </button>
             </div>
           </div>
         ) : (
           // --- 家族未所属の場合 ---
           <div className="space-y-8 animate-fade-in">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            {/* Create Block */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-teal-100 p-2 rounded-lg text-teal-600"><Users size={20}/></div>
-                <h3 className="font-bold">新しく家族グループを作る</h3>
+                <div className="bg-teal-100 p-2.5 rounded-xl text-teal-600 shadow-sm"><Users size={24}/></div>
+                <div>
+                  <h3 className="font-bold text-lg">新しく家族グループを作る</h3>
+                  <p className="text-xs text-slate-400">あなたが代表者になります</p>
+                </div>
               </div>
-              <p className="text-sm text-slate-500 mb-4">あなたが代表者となって、新しい家族グループを作成します。</p>
               <div className="flex gap-2">
                 <input 
                   type="text" 
                   placeholder="家族の名前 (例: 田中家)" 
-                  className="flex-1 border rounded-lg px-4 py-2 text-sm outline-none focus:border-teal-500 transition"
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition bg-slate-50 focus:bg-white"
                   value={familyNameInput}
                   onChange={(e) => setFamilyNameInput(e.target.value)}
                 />
                 <button 
                   onClick={handleCreateFamily}
                   disabled={!familyNameInput}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition ${!familyNameInput ? 'bg-slate-300' : 'bg-teal-600 hover:bg-teal-700'}`}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-teal-600/20 transition-all ${!familyNameInput ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 hover:scale-105 active:scale-95'}`}
                 >
                   作成
                 </button>
@@ -315,21 +308,24 @@ export default function FamilyPage() {
 
             <div className="relative flex py-2 items-center">
               <div className="flex-grow border-t border-slate-200"></div>
-              <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">OR</span>
+              <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-widest">OR</span>
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            {/* Join Block */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-300">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><UserPlus size={20}/></div>
-                <h3 className="font-bold">招待コードで参加する</h3>
+                <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600 shadow-sm"><UserPlus size={24}/></div>
+                <div>
+                  <h3 className="font-bold text-lg">招待コードで参加する</h3>
+                  <p className="text-xs text-slate-400">家族のグループに参加します</p>
+                </div>
               </div>
-              <p className="text-sm text-slate-500 mb-4">家族から教えてもらった8桁の招待コードを入力してください。</p>
               <div className="flex gap-2">
                 <input 
                   type="text" 
-                  placeholder="招待コード (例: A1B2C3D4)" 
-                  className="flex-1 border rounded-lg px-4 py-2 text-sm outline-none focus:border-blue-500 transition uppercase"
+                  placeholder="招待コード (例: A1B2...)" 
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition bg-slate-50 focus:bg-white uppercase tracking-widest font-mono"
                   value={inviteCodeInput}
                   onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())}
                   maxLength={8}
@@ -337,7 +333,7 @@ export default function FamilyPage() {
                 <button 
                   onClick={handleJoinFamily}
                   disabled={inviteCodeInput.length < 4}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition ${inviteCodeInput.length < 4 ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all ${inviteCodeInput.length < 4 ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'}`}
                 >
                   参加
                 </button>
