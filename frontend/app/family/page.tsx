@@ -124,7 +124,7 @@ export default function Family() {
     }
   };
 
-  // ★追加: コピー機能
+  // コピー機能
   const handleCopyCode = () => {
     if (!inviteCode) return;
     navigator.clipboard.writeText(inviteCode);
@@ -132,7 +132,7 @@ export default function Family() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // ★追加: 共有機能
+  // 共有機能
   const handleShareCode = async () => {
     if (!inviteCode) return;
     const shareText = `Medical Summary Assistantの家族招待コードが届いています。\n\n招待コード: ${inviteCode}\n有効期限: ${expiresAt ? formatExpiry(expiresAt) : ''}まで\n\nこちらのURLからアプリを開いて入力してください:\n${window.location.origin}/family`;
@@ -224,7 +224,6 @@ export default function Family() {
                       {inviteCode}
                     </div>
                     
-                    {/* ★追加: コピー＆共有ボタン */}
                     <div className="flex gap-3 justify-center mb-4">
                       <button 
                         onClick={handleCopyCode}
@@ -265,7 +264,6 @@ export default function Family() {
                     >
                       {generating ? "発行中..." : "招待コードを発行する"}
                     </button>
-                    {/* ★修正: 30分間有効に変更 */}
                     <p className="text-xs text-slate-400 mt-2">※発行から30分間のみ有効です</p>
                   </>
                 )}
