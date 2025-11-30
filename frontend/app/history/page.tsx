@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 // ==========================================
 // ★STEP 1: 本番環境（VS Code）では、以下の3行のコメントアウト( // )を外してください
 // ==========================================
- import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 type LinkProps = any; // エラー回避用
 
@@ -16,7 +16,7 @@ type LinkProps = any; // エラー回避用
 // --- [プレビュー用モック END] ---
 
 
-import { ArrowLeft, Calendar, FileText, ChevronRight, User, Filter, Clock } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, ChevronRight, User, Filter, Clock, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface SummaryRecord {
   id: string;
@@ -24,6 +24,7 @@ interface SummaryRecord {
   created_at: string;
   content: string; 
   departments: string;
+  is_private: boolean; // 追加
   display_name?: string;
   is_me?: boolean;
 }
@@ -95,12 +96,41 @@ export default function HistoryPage() {
     }
   };
 
+  // ★追加: 公開設定の切り替え
+  const togglePrivacy = async (e: React.MouseEvent, record: SummaryRecord) => {
+    e.preventDefault(); // リンク遷移を防ぐ
+    e.stopPropagation();
+
+    const newStatus = !record.is_private;
+    
+    // UIを即時更新 (Optimistic Update)
+    const updatedSummaries = summaries.map(s => 
+      s.id === record.id ? { ...s, is_private: newStatus } : s
+    );
+    setSummaries(updatedSummaries);
+    setFilteredSummaries(filter === 'me' ? updatedSummaries.filter(s => s.is_me) : updatedSummaries);
+
+    // DB更新
+    const { error } = await supabase
+      .from('summaries')
+      .update({ is_private: newStatus })
+      .eq('id', record.id);
+
+    if (error) {
+      alert("更新に失敗しました");
+      // 戻す
+      setSummaries(summaries); 
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const d = new Date(dateString);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
+    
     const datePart = d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
     const timePart = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    
     return isToday ? `今日 ${timePart}` : `${datePart} ${timePart}`;
   };
 
@@ -160,7 +190,6 @@ export default function HistoryPage() {
               if (!content) return null;
 
               return (
-                // ★修正: Linkコンポーネントでラップして詳細ページへ遷移
                 <Link key={item.id} href={`/history/${item.id}`} className="block">
                   <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition group relative overflow-hidden">
                     <div className={`absolute left-0 top-0 bottom-0 w-1 ${item.is_me ? 'bg-teal-500' : 'bg-blue-400'}`}></div>
@@ -171,8 +200,9 @@ export default function HistoryPage() {
                           {item.display_name?.substring(0, 1) || "?"}
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-slate-700">
-                            {item.display_name} {item.is_me && <span className="text-slate-400 font-normal">(あなた)</span>}
+                          <p className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            {item.display_name} 
+                            {item.is_me && <span className="text-slate-400 font-normal">(あなた)</span>}
                           </p>
                           <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
                             <Clock size={10} />
@@ -181,12 +211,24 @@ export default function HistoryPage() {
                         </div>
                       </div>
                       
-                      <div className="flex gap-1">
-                        {parseContent(item.departments)?.slice(0, 1).map((dept: string, i: number) => (
-                          <span key={i} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-md border border-slate-200">
-                            {dept}
-                          </span>
-                        ))}
+                      {/* 右上のアイコンエリア */}
+                      <div className="flex gap-2 items-center">
+                        {item.is_me && (
+                          <button 
+                            onClick={(e) => togglePrivacy(e, item)}
+                            className={`p-1.5 rounded-full transition ${item.is_private ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-500'}`}
+                            title={item.is_private ? "非公開" : "家族に公開中"}
+                          >
+                            {item.is_private ? <Lock size={14}/> : <Eye size={14}/>}
+                          </button>
+                        )}
+                        <div className="flex gap-1">
+                          {parseContent(item.departments)?.slice(0, 1).map((dept: string, i: number) => (
+                            <span key={i} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-md border border-slate-200">
+                              {dept}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     
@@ -195,7 +237,9 @@ export default function HistoryPage() {
                         {content.chief_complaint || "主訴なし"}
                       </h3>
                       <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                        {content.history}
+                        {item.is_private && !item.is_me 
+                          ? "🔒 非公開の記録です" 
+                          : content.history}
                       </p>
                     </div>
 

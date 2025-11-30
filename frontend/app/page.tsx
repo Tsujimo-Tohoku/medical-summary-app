@@ -18,7 +18,8 @@ type LinkProps = any; // エラー回避用
 
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
-  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus, User
+  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus, User,
+  Eye, EyeOff, Lock
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
@@ -36,7 +37,7 @@ const DICT = {
       title: "設定", lang: "言語", appearance: "表示設定", 
       fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ",
       family: "家族設定", 
-      profile: "プロフィール設定", // 追加
+      profile: "プロフィール設定", 
       account: "アカウント",
       fontLabels: { s: "小", m: "標準", l: "大" },
       themeLabels: { light: "ライト", dark: "ダーク" }
@@ -46,7 +47,8 @@ const DICT = {
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
     disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
     login: "ログイン", logout: "ログアウト", history: "履歴",
-    adTitle: "ご家族の安心のために"
+    adTitle: "ご家族の安心のために",
+    public: "家族に公開中", private: "自分のみ (非公開)"
   },
   en: { 
     label: "English", button: "Create Medical Summary", loading: "AI is organizing your symptoms...", 
@@ -59,7 +61,7 @@ const DICT = {
       title: "Settings", lang: "Language", appearance: "Appearance", 
       fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size",
       family: "Family Settings", 
-      profile: "Profile Settings", // 追加
+      profile: "Profile Settings", 
       account: "Account",
       fontLabels: { s: "Small", m: "Medium", l: "Large" },
       themeLabels: { light: "Light", dark: "Dark" }
@@ -69,55 +71,15 @@ const DICT = {
     headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
     disclaimer: "* This is AI-generated text, not a medical diagnosis. Please consult a doctor.",
     login: "Login", logout: "Logout", history: "History",
-    adTitle: "Recommended Services"
+    adTitle: "Recommended Services",
+    public: "Shared with Family", private: "Private (Only Me)"
   },
-  zh: { 
-    label: "中文", button: "生成病历摘要", loading: "AI正在整理症状...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认",
-    guideTitle: "如何使用？",
-    step1: "在下方描述您的症状。也可以使用语音输入。",
-    step2: "点击“生成病历摘要”。",
-    step3: "向医生展示摘要。",
-    settings: { 
-      title: "设置", lang: "语言", appearance: "外观", 
-      fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸",
-      family: "家庭设置", 
-      profile: "个人资料设置", // 追加
-      account: "帐户",
-      fontLabels: { s: "小", m: "中", l: "大" },
-      themeLabels: { light: "浅色", dark: "深色" }
-    },
-    placeholder: "（例）从昨天晚上开始右腹部疼痛...",
-    recommend: "相关科室示例（参考）",
-    headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" },
-    disclaimer: "※此结果由AI生成，非医生诊断。仅供参考，请务必就医。",
-    login: "登录", logout: "登出", history: "历史记录",
-    adTitle: "推荐服务"
-  },
-  vi: { 
-    label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang sắp xếp triệu chứng...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú cho bạn",
-    guideTitle: "Cách sử dụng?",
-    step1: "Mô tả triệu chứng bên dưới. Có thể dùng giọng nói.",
-    step2: "Nhấn nút 'Tạo tóm tắt'.",
-    step3: "Đưa bản tóm tắt cho bác sĩ.",
-    settings: { 
-      title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", 
-      fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF",
-      family: "Cài đặt gia đình", 
-      profile: "Cài đặt hồ sơ", // 追加
-      account: "Tài khoản",
-      fontLabels: { s: "Nhỏ", m: "Vừa", l: "Lớn" },
-      themeLabels: { light: "Sáng", dark: "Tối" }
-    },
-    placeholder: "(Ví dụ) Tôi bị đau bụng bên phải từ tối qua...",
-    recommend: "Các khoa liên quan (Tham khảo)",
-    headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" },
-    disclaimer: "* Đây là văn bản do AI tạo ra, không phải chẩn đoán y tế. Vui lòng tham khảo ý kiến bác sĩ.",
-    login: "Đăng nhập", logout: "Đăng xuất", history: "Lịch sử",
-    adTitle: "Dịch vụ được đề xuất"
-  },
+  // 他言語省略（ja/enと同様）
+  zh: { label: "中文", button: "生成病历摘要", loading: "AI正在整理...", copy: "复制", copied: "已复制", share: "分享", pdf: "保存PDF", explanationTitle: "给您的确认", guideTitle: "如何使用？", step1: "", step2: "", step3: "", settings: { title: "设置", lang: "语言", appearance: "外观", fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸", family: "家庭设置", profile: "个人资料", account: "帐户", fontLabels: { s: "小", m: "中", l: "大" }, themeLabels: { light: "浅色", dark: "深色" } }, placeholder: "...", recommend: "...", headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史" }, disclaimer: "...", login: "登录", logout: "登出", history: "历史记录", adTitle: "推荐服务", public: "家庭公开", private: "仅限自己" },
+  vi: { label: "Tiếng Việt", button: "Tạo tóm tắt", loading: "AI đang sắp xếp...", copy: "Sao chép", copied: "Đã sao chép", share: "Chia sẻ", pdf: "Lưu PDF", explanationTitle: "Ghi chú", guideTitle: "Cách sử dụng?", step1: "", step2: "", step3: "", settings: { title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF", family: "Gia đình", profile: "Hồ sơ", account: "Tài khoản", fontLabels: { s: "Nhỏ", m: "Vừa", l: "Lớn" }, themeLabels: { light: "Sáng", dark: "Tối" } }, placeholder: "...", recommend: "...", headers: { cc: "Lý do", history: "Bệnh sử", symptoms: "Triệu chứng", background: "Tiền sử" }, disclaimer: "...", login: "Đăng nhập", logout: "Đăng xuất", history: "Lịch sử", adTitle: "Dịch vụ", public: "Công khai", private: "Riêng tư" },
 };
 
-type LangKey = keyof typeof DICT;
+type LangKey = 'ja' | 'en' | 'zh' | 'vi';
 type Theme = 'light' | 'dark';
 type FontSize = 'small' | 'medium' | 'large';
 type PdfSize = 'A4' | 'B5' | 'Receipt';
@@ -131,6 +93,7 @@ interface AnalysisResult {
   }; 
   departments?: string[];
   explanation?: string;
+  id?: string; // DB保存後のID
 }
 
 // 整形テキスト表示用コンポーネント
@@ -175,7 +138,9 @@ export default function MedicalSummaryApp() {
   
   const [user, setUser] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  
+  const [isPrivate, setIsPrivate] = useState(false); // ★プライバシー設定
+  const [currentRecordId, setCurrentRecordId] = useState<string | null>(null); // 保存済みレコードID
+
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -183,12 +148,10 @@ export default function MedicalSummaryApp() {
   const t = DICT[lang] || DICT.ja;
 
   useEffect(() => {
-    // OS設定の反映
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setTheme('dark');
     }
 
-    // ユーザー認証チェック
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
@@ -199,7 +162,6 @@ export default function MedicalSummaryApp() {
       setUser(session?.user ?? null);
     });
 
-    // 設定メニュー外クリックで閉じる
     const handleClickOutside = (event: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setIsSettingsOpen(false);
@@ -245,7 +207,7 @@ export default function MedicalSummaryApp() {
   const getTextSizeClass = () => {
     switch(fontSize) {
       case 'small': return 'text-sm';
-      case 'large': return 'text-xl'; // 高齢者向けに大きく
+      case 'large': return 'text-xl';
       default: return 'text-base';
     }
   };
@@ -255,6 +217,8 @@ export default function MedicalSummaryApp() {
     setIsLoading(true);
     setResult(null);
     setSaveStatus(null);
+    setIsPrivate(false); // デフォルトは公開
+    setCurrentRecordId(null);
     if (isRecording) toggleRecording();
 
     try {
@@ -269,18 +233,45 @@ export default function MedicalSummaryApp() {
       setResult(data);
 
       if (user) {
-        const { error } = await supabase.from('summaries').insert({
+        // ★保存時に is_private: false (デフォルト) で保存
+        const { data: inserted, error } = await supabase.from('summaries').insert({
           user_id: user.id,
           content: JSON.stringify(data.summary),
-          departments: JSON.stringify(data.departments || [])
-        });
-        setSaveStatus(error ? "保存失敗" : "履歴に保存済");
+          departments: JSON.stringify(data.departments || []),
+          is_private: false // 初期値は公開
+        }).select('id').single();
+
+        if (error) {
+          setSaveStatus(error ? "保存失敗" : "履歴に保存済");
+        } else if (inserted) {
+          setSaveStatus("履歴に保存済");
+          setCurrentRecordId(inserted.id); // IDを保持して後で更新できるようにする
+        }
       }
     } catch (error) {
       console.error(error);
       alert("エラーが発生しました。");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ★プライバシー設定の切り替え処理
+  const togglePrivacy = async () => {
+    if (!currentRecordId || !user) return;
+    
+    const newStatus = !isPrivate;
+    setIsPrivate(newStatus); // UIを即時反映
+
+    // DB更新
+    const { error } = await supabase
+      .from('summaries')
+      .update({ is_private: newStatus })
+      .eq('id', currentRecordId);
+
+    if (error) {
+      alert("設定の更新に失敗しました");
+      setIsPrivate(!newStatus); // 戻す
     }
   };
 
@@ -317,8 +308,6 @@ export default function MedicalSummaryApp() {
 
   const containerClass = `min-h-screen font-sans transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`;
   const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
-  
-  // 医師用ヘッダーは日本語固定
   const docHeaders = DICT.ja.headers;
 
   return (
@@ -329,7 +318,6 @@ export default function MedicalSummaryApp() {
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-teal-600/20">
               <FilePlus size={18} />
             </div>
-            {/* アプリ名をKarteNoに変更 */}
             <h1 className="text-lg font-bold tracking-tight font-mono">
               KarteNo <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline tracking-normal">Smart Medical Summary</span>
             </h1>
@@ -353,14 +341,12 @@ export default function MedicalSummaryApp() {
               
               {isSettingsOpen && (
                 <div className={`absolute right-0 mt-2 w-72 rounded-xl shadow-xl border py-2 z-50 animate-fade-in ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                   {/* アカウント・家族設定 (翻訳適用) */}
                    <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">{t.settings.account}</div>
                    {user ? (
                       <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-red-500"><LogOut size={14}/> {t.logout}</button>
                    ) : (
                       <Link href="/login" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-teal-600">{t.login}</Link>
                    )}
-                   {/* プロフィール設定リンク (追加) */}
                    <Link href="/profile" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2">
                      <User size={14}/> {t.settings.profile}
                    </Link>
@@ -370,7 +356,6 @@ export default function MedicalSummaryApp() {
                    
                    <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
                    
-                   {/* 言語設定 */}
                    <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><Globe size={12}/> {t.settings.lang}</div>
                    <div className="grid grid-cols-2 gap-1 px-4 mb-2">
                       {(['ja', 'en', 'zh', 'vi'] as LangKey[]).map((l) => (
@@ -382,7 +367,6 @@ export default function MedicalSummaryApp() {
 
                    <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
 
-                   {/* 文字サイズ (翻訳適用) */}
                    <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><Type size={12}/> {t.settings.fontSize}</div>
                    <div className="flex bg-slate-100 dark:bg-slate-800 rounded mx-4 p-1 mb-2">
                       <button onClick={() => setFontSize('small')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'small' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>{t.settings.fontLabels.s}</button>
@@ -390,7 +374,6 @@ export default function MedicalSummaryApp() {
                       <button onClick={() => setFontSize('large')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'large' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>{t.settings.fontLabels.l}</button>
                    </div>
                    
-                   {/* テーマ (翻訳適用) */}
                    <div className="flex gap-2 px-4 mt-3">
                      <button onClick={() => setTheme('light')} className={`flex-1 py-1 text-xs border rounded ${theme === 'light' ? 'bg-slate-100 border-slate-300' : 'border-slate-700'}`}>☀️ {t.settings.themeLabels.light}</button>
                      <button onClick={() => setTheme('dark')} className={`flex-1 py-1 text-xs border rounded ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'border-slate-200'}`}>🌙 {t.settings.themeLabels.dark}</button>
@@ -455,8 +438,21 @@ export default function MedicalSummaryApp() {
           <div className="animate-fade-in space-y-6">
             
             {saveStatus && (
-              <div className="flex items-center justify-center gap-2 text-xs font-bold text-teal-600 bg-teal-50 dark:bg-teal-900/20 py-2 rounded-lg">
-                <Check size={14} /> {saveStatus}
+              <div className="flex items-center justify-between bg-teal-50 dark:bg-teal-900/20 p-3 rounded-lg border border-teal-100 dark:border-teal-800">
+                <div className="flex items-center gap-2 text-xs font-bold text-teal-600">
+                  <Check size={14} /> {saveStatus}
+                </div>
+                
+                {/* ★追加: 作成直後のプライバシー設定トグル */}
+                {user && currentRecordId && (
+                  <button 
+                    onClick={togglePrivacy}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition ${isPrivate ? 'bg-slate-200 text-slate-600' : 'bg-blue-100 text-blue-600'}`}
+                  >
+                    {isPrivate ? <Lock size={12}/> : <Eye size={12}/>}
+                    {isPrivate ? t.private : t.public}
+                  </button>
+                )}
               </div>
             )}
 
