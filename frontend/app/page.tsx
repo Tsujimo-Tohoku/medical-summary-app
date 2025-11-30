@@ -17,7 +17,7 @@ type LinkProps = any; // エラー回避用
 
 
 import { 
-  Mic, Settings, FileText, Share2, Copy, Check, 
+  Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
   LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus, User,
   Eye, Lock, Utensils, HeartPulse, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Heart
 } from 'lucide-react';
@@ -169,10 +169,12 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
   const settingsRef = useRef<HTMLDivElement>(null);
   const t = DICT[lang as LangKey] || DICT.ja;
 
-  // テーマ設定などは省略せず実装
   const getTextSizeClass = () => {
     switch(fontSize) { case 'small': return 'text-sm'; case 'large': return 'text-xl'; default: return 'text-base'; }
   };
+
+  // ★修正: cardClass の定義を追加
+  const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
 
   const handleAnalyze = async () => {
     if (!inputText.trim()) return;
