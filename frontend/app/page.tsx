@@ -7,7 +7,7 @@ import Link from 'next/link';
 // アイコンライブラリ
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
-  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type
+  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
@@ -21,9 +21,17 @@ const DICT = {
     step1: "下の入力欄に、症状を書いてください。マイクボタンで音声入力も可能です。",
     step2: "「医師に見せる画面を作成」ボタンを押します。",
     step3: "整理されたサマリーが表示されます。そのまま医師に見せるか、Web問診票にコピーしてください。",
-    settings: { title: "設定", lang: "言語", appearance: "表示設定", fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ" },
+    settings: { 
+      title: "設定", lang: "言語", appearance: "表示設定", 
+      fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ",
+      family: "家族設定", 
+      account: "アカウント",
+      fontLabels: { s: "小", m: "標準", l: "大" },
+      themeLabels: { light: "ライト", dark: "ダーク" }
+    },
     placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
     recommend: "関連する診療科の例（参考）",
+    // 医師用ヘッダーは日本語固定のため、ここは参照用ですが日本語版を基準にします
     headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
     disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
     login: "ログイン", logout: "ログアウト", history: "履歴",
@@ -36,7 +44,14 @@ const DICT = {
     step1: "Describe your symptoms below. You can also use voice input.",
     step2: "Tap 'Create Medical Summary'.",
     step3: "Show the summary to your doctor.",
-    settings: { title: "Settings", lang: "Language", appearance: "Appearance", fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size" },
+    settings: { 
+      title: "Settings", lang: "Language", appearance: "Appearance", 
+      fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size",
+      family: "Family Settings", 
+      account: "Account",
+      fontLabels: { s: "Small", m: "Medium", l: "Large" },
+      themeLabels: { light: "Light", dark: "Dark" }
+    },
     placeholder: "(Ex) I have a throbbing pain in my right stomach since last night...",
     recommend: "Related Departments (Ref)",
     headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
@@ -50,7 +65,14 @@ const DICT = {
     step1: "在下方描述您的症状。也可以使用语音输入。",
     step2: "点击“生成病历摘要”。",
     step3: "向医生展示摘要。",
-    settings: { title: "设置", lang: "语言", appearance: "外观", fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸" },
+    settings: { 
+      title: "设置", lang: "语言", appearance: "外观", 
+      fontSize: "字体大小", theme: "主题", pdfSize: "PDF尺寸",
+      family: "家庭设置", 
+      account: "帐户",
+      fontLabels: { s: "小", m: "中", l: "大" },
+      themeLabels: { light: "浅色", dark: "深色" }
+    },
     placeholder: "（例）从昨天晚上开始右腹部疼痛...",
     recommend: "相关科室示例（参考）",
     headers: { cc: "主诉", history: "现病史", symptoms: "伴随症状", background: "既往史/服药" },
@@ -64,7 +86,14 @@ const DICT = {
     step1: "Mô tả triệu chứng bên dưới. Có thể dùng giọng nói.",
     step2: "Nhấn nút 'Tạo tóm tắt'.",
     step3: "Đưa bản tóm tắt cho bác sĩ.",
-    settings: { title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF" },
+    settings: { 
+      title: "Cài đặt", lang: "Ngôn ngữ", appearance: "Giao diện", 
+      fontSize: "Cỡ chữ", theme: "Chủ đề", pdfSize: "Kích thước PDF",
+      family: "Cài đặt gia đình", 
+      account: "Tài khoản",
+      fontLabels: { s: "Nhỏ", m: "Vừa", l: "Lớn" },
+      themeLabels: { light: "Sáng", dark: "Tối" }
+    },
     placeholder: "(Ví dụ) Tôi bị đau bụng bên phải từ tối qua...",
     recommend: "Các khoa liên quan (Tham khảo)",
     headers: { cc: "Lý do đến khám", history: "Bệnh sử", symptoms: "Triệu chứng kèm theo", background: "Tiền sử bệnh / Thuốc" },
@@ -181,6 +210,7 @@ export default function MedicalSummaryApp() {
       return;
     }
     const recognition = new SpeechRecognition();
+    // 言語設定に応じて音声認識の言語も変更
     recognition.lang = lang === 'ja' ? 'ja-JP' : lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'vi-VN';
     recognition.interimResults = true;
     recognition.continuous = true;
@@ -244,7 +274,9 @@ export default function MedicalSummaryApp() {
   const handleDownloadPDF = async () => {
     if (!result) return;
     try {
-      const fullText = `■ ${t.headers.cc}\n${result.summary.chief_complaint}\n\n■ ${t.headers.history}\n${result.summary.history}\n\n■ ${t.headers.symptoms}\n${result.summary.symptoms}\n\n■ ${t.headers.background}\n${result.summary.background}`;
+      // PDF出力も日本語のヘッダーで固定する
+      const h = DICT.ja.headers;
+      const fullText = `■ ${h.cc}\n${result.summary.chief_complaint}\n\n■ ${h.history}\n${result.summary.history}\n\n■ ${h.symptoms}\n${result.summary.symptoms}\n\n■ ${h.background}\n${result.summary.background}`;
       const response = await fetch(`${BACKEND_URL}/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -264,7 +296,9 @@ export default function MedicalSummaryApp() {
 
   const handleCopy = () => {
     if (!result) return;
-    const textToCopy = `【主訴】${result.summary.chief_complaint}\n【現病歴】${result.summary.history}\n【随伴症状】${result.summary.symptoms}\n【既往歴】${result.summary.background}`.replace(/\*\*/g, "");
+    // コピーも日本語ヘッダー固定
+    const h = DICT.ja.headers;
+    const textToCopy = `【${h.cc}】${result.summary.chief_complaint}\n【${h.history}】${result.summary.history}\n【${h.symptoms}】${result.summary.symptoms}\n【${h.background}】${result.summary.background}`.replace(/\*\*/g, "");
     navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -273,6 +307,9 @@ export default function MedicalSummaryApp() {
   const containerClass = `min-h-screen font-sans transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`;
   const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
   
+  // 医師用ヘッダーは日本語固定
+  const docHeaders = DICT.ja.headers;
+
   return (
     <div className={containerClass}>
       <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
@@ -281,8 +318,9 @@ export default function MedicalSummaryApp() {
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-teal-600/20">
               <Activity size={18} />
             </div>
+            {/* アプリ名をSonaelに変更 */}
             <h1 className="text-lg font-bold tracking-tight">
-              Medical <span className="text-teal-600">Note</span>
+              Sonael <span className="text-teal-600 font-normal text-sm ml-1 hidden sm:inline">Medical Support</span>
             </h1>
           </div>
           
@@ -304,14 +342,16 @@ export default function MedicalSummaryApp() {
               
               {isSettingsOpen && (
                 <div className={`absolute right-0 mt-2 w-72 rounded-xl shadow-xl border py-2 z-50 animate-fade-in ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                   {/* アカウント・家族設定 */}
-                   <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">Account</div>
+                   {/* アカウント・家族設定 (翻訳適用) */}
+                   <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">{t.settings.account}</div>
                    {user ? (
                       <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-red-500"><LogOut size={14}/> {t.logout}</button>
                    ) : (
                       <Link href="/login" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-teal-600">{t.login}</Link>
                    )}
-                   <Link href="/family" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300">👨‍👩‍👧‍👦 家族設定</Link>
+                   <Link href="/family" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                     <Users size={14}/> {t.settings.family}
+                   </Link>
                    
                    <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
                    
@@ -327,18 +367,18 @@ export default function MedicalSummaryApp() {
 
                    <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
 
-                   {/* 文字サイズ */}
+                   {/* 文字サイズ (翻訳適用) */}
                    <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><Type size={12}/> {t.settings.fontSize}</div>
                    <div className="flex bg-slate-100 dark:bg-slate-800 rounded mx-4 p-1 mb-2">
-                      <button onClick={() => setFontSize('small')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'small' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>小</button>
-                      <button onClick={() => setFontSize('medium')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'medium' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>標準</button>
-                      <button onClick={() => setFontSize('large')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'large' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>大</button>
+                      <button onClick={() => setFontSize('small')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'small' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>{t.settings.fontLabels.s}</button>
+                      <button onClick={() => setFontSize('medium')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'medium' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>{t.settings.fontLabels.m}</button>
+                      <button onClick={() => setFontSize('large')} className={`flex-1 py-1 text-xs rounded ${fontSize === 'large' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}>{t.settings.fontLabels.l}</button>
                    </div>
                    
-                   {/* テーマ */}
+                   {/* テーマ (翻訳適用) */}
                    <div className="flex gap-2 px-4 mt-3">
-                     <button onClick={() => setTheme('light')} className={`flex-1 py-1 text-xs border rounded ${theme === 'light' ? 'bg-slate-100 border-slate-300' : 'border-slate-700'}`}>☀️ Light</button>
-                     <button onClick={() => setTheme('dark')} className={`flex-1 py-1 text-xs border rounded ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'border-slate-200'}`}>🌙 Dark</button>
+                     <button onClick={() => setTheme('light')} className={`flex-1 py-1 text-xs border rounded ${theme === 'light' ? 'bg-slate-100 border-slate-300' : 'border-slate-700'}`}>☀️ {t.settings.themeLabels.light}</button>
+                     <button onClick={() => setTheme('dark')} className={`flex-1 py-1 text-xs border rounded ${theme === 'dark' ? 'bg-slate-800 border-slate-600' : 'border-slate-200'}`}>🌙 {t.settings.themeLabels.dark}</button>
                    </div>
                 </div>
               )}
@@ -429,10 +469,11 @@ export default function MedicalSummaryApp() {
                   </div>
                 )}
 
-                <SummarySection title={t.headers.cc} content={result.summary.chief_complaint} />
-                <SummarySection title={t.headers.history} content={result.summary.history} />
-                <SummarySection title={t.headers.symptoms} content={result.summary.symptoms} />
-                <SummarySection title={t.headers.background} content={result.summary.background} />
+                {/* ここは日本語の docHeaders を固定で使用 */}
+                <SummarySection title={docHeaders.cc} content={result.summary.chief_complaint} />
+                <SummarySection title={docHeaders.history} content={result.summary.history} />
+                <SummarySection title={docHeaders.symptoms} content={result.summary.symptoms} />
+                <SummarySection title={docHeaders.background} content={result.summary.background} />
 
                 <div className="mt-8 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 rounded-lg flex gap-3 text-xs text-amber-800 dark:text-amber-400">
                   <ShieldAlert size={24} className="flex-shrink-0" />
@@ -477,7 +518,7 @@ export default function MedicalSummaryApp() {
           <Link href="/privacy" className="hover:text-teal-600 transition">Privacy</Link>
           <Link href="/terms" className="hover:text-teal-600 transition">Terms</Link>
         </div>
-        <p>© 2025 Medical Note.</p>
+        <p>© 2025 Sonael.</p>
       </footer>
     </div>
   );
