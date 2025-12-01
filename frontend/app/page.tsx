@@ -255,7 +255,7 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg"><FilePlus size={18} /></div>
-            <h1 className="text-lg font-bold tracking-tight font-mono">KarteNo <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Smart Medical Summary</span></h1>
+            <h1 className="text-lg font-bold tracking-tight font-mono">Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Smart Medical Summary</span></h1>
           </div>
           <div className="flex items-center gap-3">
             {isGuest ? (
@@ -366,7 +366,7 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
           <Link href="/contact" className="hover:text-teal-600 transition">お問い合わせ</Link>
           <Link href="/about" className="hover:text-teal-600 transition">開発者について</Link>
         </div>
-        <p>© 2025 KarteNo.</p>
+        <p>© 2025 Karutto.</p>
       </footer>
     </div>
   );
@@ -382,7 +382,7 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white"><FilePlus size={18} /></div>
-            <span className="text-xl font-bold font-mono tracking-tight text-slate-800">KarteNo</span>
+            <span className="text-xl font-bold font-mono tracking-tight text-slate-800">Karutto</span>
           </div>
           <div className="flex gap-4">
             <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-teal-600 transition py-2">ログイン</Link>
@@ -401,7 +401,7 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
           </h1>
           <p className="text-lg text-slate-500 mb-10 max-w-2xl mx-auto leading-relaxed">
             症状をうまく説明できない、伝え忘れが心配。<br/>
-            KarteNo（カルテノ）は、そんな患者さんとご家族のための、<br/>通院サポートアプリです。
+            カルット（Karutto）は、そんな患者さんとご家族のための、<br/>通院サポートアプリです。
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button onClick={onTry} className="bg-teal-600 text-white font-bold py-4 px-8 rounded-full text-lg hover:bg-teal-700 transition shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2">
@@ -447,14 +447,14 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
 
       <footer className="bg-slate-900 text-slate-400 py-12 px-6">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="font-mono font-bold text-xl text-white">KarteNo</div>
+          <div className="font-mono font-bold text-xl text-white">Karutto</div>
           <div className="flex gap-6 text-sm font-bold">
             <Link href="/terms" className="hover:text-white transition">利用規約</Link>
             <Link href="/privacy" className="hover:text-white transition">プライバシーポリシー</Link>
             <Link href="/contact" className="hover:text-white transition">お問い合わせ</Link>
             <Link href="/about" className="hover:text-white transition">開発者について</Link>
           </div>
-          <p className="text-xs text-slate-600">© 2025 KarteNo. All rights reserved.</p>
+          <p className="text-xs text-slate-600">© 2025 Karutto. All rights reserved.</p>
         </div>
       </footer>
     </div>
