@@ -39,7 +39,7 @@ export default function About() {
             
             <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed text-sm md:text-base space-y-4">
               <p>
-                はじめまして。この「KarteNo (Smart Medical Summary)」を開発した、東北大学 電気情報物理工学科の学生です。
+                はじめまして。この「Karutto (Smart Medical Summary)」を開発した、東北大学 電気情報物理工学科の学生です。
               </p>
               <p>
                 このアプリを作ったきっかけは、私自身のコンプレックスにあります。
@@ -141,7 +141,7 @@ export default function About() {
       </main>
 
       <footer className="py-8 text-center text-sm text-slate-400">
-        <p>© 2025 KarteNo.</p>
+        <p>© 2025 Karutto.</p>
       </footer>
     </div>
   );

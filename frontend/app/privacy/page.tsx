@@ -22,7 +22,7 @@ export default function PrivacyPage() {
           </h2>
 
           <p className="text-sm text-slate-500 mb-8">
-            KarteNo（以下「当サービス」といいます）における、ユーザーの個人情報の取扱いについて、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます）を定めます。
+            Karutto（以下「当サービス」といいます）における、ユーザーの個人情報の取扱いについて、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます）を定めます。
           </p>
 
           <h3 className="text-lg font-bold text-slate-700 mt-8 mb-4">1. 収集する情報</h3>
