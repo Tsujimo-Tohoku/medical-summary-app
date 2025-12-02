@@ -11,9 +11,7 @@ except ImportError:
     sanitizer = None
 
 import google.generativeai as genai
-import stripe
-from supabase import create_client, Client
-from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -31,31 +29,16 @@ load_dotenv()
 
 # --- Config & Security ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
 if not GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY is not set.")
 
-# Initialize Clients
 genai.configure(api_key=GEMINI_API_KEY)
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-
-# Supabase Admin Client
-supabase: Client = None
-if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-else:
-    print("WARNING: Supabase credentials not set. Subscription updates will fail.")
 
 app = FastAPI()
 
-# CORS
+# CORS: フロントエンドのURLを許可
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-allow_origins = [FRONTEND_URL, "https://medical-summary-app.vercel.app", "https://karteno.jp"]
+allow_origins = [FRONTEND_URL, "https://medical-summary-app.vercel.app"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,7 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Font Loading
+# フォント読み込み (IPAexGothic)
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     font_path = os.path.join(current_dir, "ipaexg.ttf")
@@ -76,19 +59,8 @@ try:
 except Exception as e:
     print(f"Font Load Error: {e}")
 
-# --- ★ Plan Configuration (拡張性の鍵) ---
-# StripeのPrice IDと、アプリ内のプラン識別子をここで紐付ける。
-# 新しいプランを作ったら、ここに追加するだけでOK。
-# 環境変数で管理しても良いが、コード管理の方が視認性が高い場合もある。
-PLAN_MAPPING = {
-    # 本番用 (環境変数から読み込むのがベストだが、例として記述)
-    os.getenv("STRIPE_PRICE_ID_PRO", "price_dummy_pro"): "pro_monthly",
-    os.getenv("STRIPE_PRICE_ID_FAMILY", "price_dummy_family"): "family_monthly",
-    # 将来の拡張例:
-    # "price_premium_annual_id": "premium_annual",
-}
-
-# --- AI Settings ---
+# --- AI Settings (君のチューニングを復元) ---
+# 医師視点でのカルテ作成＆法的リスク回避のシステム指示
 system_instruction = """
 あなたは救急・総合診療の経験豊富な「医療秘書AI」です。
 患者（ユーザー）の入力した症状から、医師が診断に必要な情報（OPQRST、既往歴、リスク因子）を抽出し、
@@ -98,21 +70,19 @@ system_instruction = """
 1. あなたは医師ではありません。「診断（病名の断定）」は絶対に行わないでください。
 2. 「○○病の疑いがあります」といった病名の示唆も避けてください。
 3. 診療科の提案を行う場合は、あくまで「一般的に考えられる可能性」として提示し、断定的な表現を避けてください。
-
-【出力品質の基準】
-- 医師が短時間で状況を把握できる「専門的かつ簡潔」な表現を用いること。
-- 患者が「言ったこと」と「言わなかったこと（陰性所見）」を明確に区別すること。
 """
 model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_instruction)
 
 # --- Helper Functions ---
 
 def mask_pii(text: str) -> str:
+    """個人情報（電話番号、メアド）の簡易マスキング"""
     text = re.sub(r'\d{2,4}[-\s]?\d{2,4}[-\s]?\d{3,4}', '[PHONE_HIDDEN]', text)
     text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_HIDDEN]', text)
     return text
 
 def sanitize_input(text: str) -> str:
+    """PDF生成用サニタイズ"""
     if sanitizer:
         return sanitizer.sanitize(text)
     return html.escape(text)
@@ -124,17 +94,15 @@ class UserRequest(BaseModel):
     language: str = "Japanese"
     pdf_size: str = "A4"
 
-class CheckoutRequest(BaseModel):
-    price_id: str 
-    user_id: str
-    cancel_url: str = f"{FRONTEND_URL}/plans" 
-
 # --- Endpoints ---
 
 @app.post("/analyze")
 async def analyze_symptoms(request: UserRequest):
     try:
+        # 1. PII Masking
         safe_text = mask_pii(request.text)
+
+        # 2. Prompt Construction (君のこだわりプロンプトを使用)
         explanation_instruction = ""
         if request.language not in ["Japanese", "日本語", "ja"]:
              explanation_instruction = f"- `explanation`: ユーザーへの説明を{request.language}で記述（AIの理解を伝えるため）。"
@@ -142,8 +110,7 @@ async def analyze_symptoms(request: UserRequest):
              explanation_instruction = "- `explanation`: 空文字（\"\"）にしてください。"
 
         prompt = f"""
-        以下の患者の訴えを分析し、以下のJSONフォーマットのみを出力してください。
-        Markdown記号（###など）は含めないでください。純粋なJSON文字列のみを返してください。
+        以下の患者の訴えを分析し、以下のJSONフォーマットのみを出力してください。Markdown記号（###など）は不要です。
 
         対象テキスト:
         {safe_text}
@@ -153,20 +120,19 @@ async def analyze_symptoms(request: UserRequest):
         【出力JSONフォーマット】
         {{
             "summary": {{
-                "chief_complaint": "主訴（一番の症状を一言で。期間を含める。例: **3日前**からの発熱）",
-                "history": "現病歴（OPQRSTに基づき、時系列順に記述。重要な陰性所見（例: 呼吸苦はない）もあれば含める）",
-                "symptoms": "随伴症状（主訴に伴うその他の症状。箇条書き推奨）",
+                "chief_complaint": "主訴（一番の症状を一言で）",
+                "history": "現病歴（いつから、どうなったか、OPQRST情報を含めて時系列で記述）",
+                "symptoms": "随伴症状（主訴に伴うその他の症状）",
                 "background": "既往歴・服薬・アレルギー（入力になければ「特記なし」）"
             }},
             "departments": ["診療科1", "診療科2"], 
             "explanation": "ユーザーへの説明（日本語以外の場合のみ）"
         }}
 
-        重要指示: 
-        - 医師が読むためのカルテ用語（例: 「熱がある」→「発熱」、「お腹が痛い」→「腹痛」）に変換すること。
-        - **数値**（体温、回数）、**期間**（いつから）、**部位**（右下腹部など）は、医師が見落とさないよう **太字** で囲むこと（例: **38.5度**）。
-        - 否定された症状（「吐き気はない」など）も、鑑別診断に重要なため省略せずに記載すること。
-        - `departments` は、可能性のある診療科を広い範囲で抽出すること。
+        重要: 
+        - 医師が読むための専門的かつ簡潔な表現に変換すること。
+        - 重要なキーワード（数値、期間、部位）は強調のため **太字** で囲むこと（例: **38.5度**の発熱）。
+        - `departments` は「推奨」ではなく「関連する診療科の例」として抽出すること。迷う場合は「一般内科」を含める。
         """
         
         response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
@@ -180,6 +146,8 @@ async def analyze_symptoms(request: UserRequest):
 async def create_pdf(request: UserRequest):
     try:
         buffer = io.BytesIO()
+        
+        # サイズ設定
         pagesize = A4
         margin = 20*mm
         if request.pdf_size == "B5": pagesize = B5
@@ -213,18 +181,23 @@ async def create_pdf(request: UserRequest):
         story.append(Paragraph(title_text, title_style))
         story.append(Spacer(1, 5*mm))
         
+        # テキスト処理
         lines = request.text.split('\n')
         for line in lines:
             if not line.strip(): continue
+            
+            # HTMLエスケープ & 太字復元
             safe_line = html.escape(line)
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', safe_line)
             
+            # 見出し装飾
             if line.strip().startswith("■"):
                 clean_text = formatted_line.replace("■", "").strip()
                 story.append(Spacer(1, 2*mm))
                 header_size = base_font_size + 2
                 story.append(Paragraph(f"<font size={header_size}><b>■ {clean_text}</b></font>", jp_style))
             elif line.strip().startswith("- ") or line.strip().startswith("・"):
+                # リスト表示
                 clean_text = formatted_line.replace("- ", "").replace("・", "").strip()
                 story.append(Paragraph(f"• {clean_text}", jp_style))
             else:
@@ -241,85 +214,3 @@ async def create_pdf(request: UserRequest):
     except Exception as e:
         print(f"PDF Error: {e}")
         raise HTTPException(status_code=500, detail="PDF generation failed.")
-
-# --- Stripe Payment Endpoints (Updated) ---
-
-@app.post("/create-checkout-session")
-async def create_checkout_session(request: CheckoutRequest):
-    """
-    Stripeの決済画面URLを発行する
-    """
-    try:
-        if not STRIPE_SECRET_KEY:
-            raise HTTPException(status_code=500, detail="Stripe config missing")
-
-        # ★ Price IDからプランタイプを特定し、Metadataに埋め込む
-        # これにより、Webhook側でロジックを変える必要がなくなる
-        plan_type = PLAN_MAPPING.get(request.price_id, "unknown_plan")
-        
-        # もし未知のPrice IDが来たら、デフォルトかエラーにする（ここでは安全のためそのまま通すがログ出す）
-        if plan_type == "unknown_plan":
-            print(f"Warning: Unknown Price ID received: {request.price_id}")
-
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[
-                {
-                    'price': request.price_id, 
-                    'quantity': 1,
-                },
-            ],
-            mode='subscription', 
-            success_url=f"{FRONTEND_URL}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=request.cancel_url,
-            client_reference_id=request.user_id,
-            metadata={
-                "user_id": request.user_id,
-                "plan_type": plan_type  # ★ ここに動的にプラン名を入れる
-            }
-        )
-        return {"url": checkout_session.url}
-    except Exception as e:
-        print(f"Stripe Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/webhook")
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
-    payload = await request.body()
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, stripe_signature, STRIPE_WEBHOOK_SECRET
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        await handle_checkout_completed(session)
-
-    return {"status": "success"}
-
-async def handle_checkout_completed(session):
-    """
-    決済成功時のロジック: Supabaseのユーザー情報を更新
-    """
-    user_id = session.get("client_reference_id")
-    customer_id = session.get("customer")
-    # ★ Metadataからプラン情報を取り出す（動的）
-    metadata = session.get("metadata", {})
-    plan_type = metadata.get("plan_type", "free") 
-    
-    if not user_id or not supabase:
-        print("Webhook Warning: No user_id or Supabase client.")
-        return
-
-    try:
-        supabase.table("profiles").update({
-            "stripe_customer_id": customer_id,
-            "subscription_status": "active",
-            "plan_type": plan_type # ★ データベースにはMetadataの値をそのまま保存
-        }).eq("id", user_id).execute()
-        print(f"User {user_id} upgraded to {plan_type}.")
-    except Exception as e:
-        print(f"Supabase Update Error: {e}")
