@@ -1,39 +1,438 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-// ディレクトリ構成: frontend/app/page.tsx -> frontend/lib/supabaseClient.ts
-import { supabase } from '../lib/supabaseClient'; 
+import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from '../lib/supabaseClient';
 import Link from 'next/link';
+
+// ★ 新しい広告コンポーネントをインポート
+import { NativeAds } from '../components/NativeAds';
+
+type LinkProps = any; // エラー回避用
+
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
   LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, User,
-  Eye, Lock, ChevronRight, ArrowRight, ShieldCheck, Heart, Loader2
+  Eye, Lock, Utensils, HeartPulse, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Heart
 } from 'lucide-react';
-// ディレクトリ構成: frontend/app/page.tsx -> frontend/components/NativeAds.tsx
-import { NativeAds } from '../components/NativeAds';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
 
+// --- 広告データ (NativeAdsコンポーネントに移動したため削除) ---
+// const AD_ITEMS = ... 
+
+// --- 辞書データ ---
+const DICT = {
+  ja: { 
+    label: "日本語", button: "医師に見せる画面を作成", loading: "AIが症状を整理・言語化しています...", 
+    copy: "コピー", copied: "完了", share: "LINE等で送る", pdf: "PDFで保存", explanationTitle: "患者様への確認メモ",
+    guideTitle: "このツールの使い方は？",
+    step1: "下の入力欄に、症状を書いてください。マイクボタンで音声入力も可能です。",
+    step2: "「医師に見せる画面を作成」ボタンを押します。",
+    step3: "整理されたサマリーが表示されます。そのまま医師に見せるか、Web問診票にコピーしてください。",
+    settings: { 
+      title: "設定", lang: "言語", appearance: "表示設定", 
+      fontSize: "文字サイズ", theme: "テーマ", pdfSize: "PDFサイズ",
+      family: "家族設定", profile: "プロフィール設定", account: "アカウント",
+      fontLabels: { s: "小", m: "標準", l: "大" },
+      themeLabels: { light: "ライト", dark: "ダーク" }
+    },
+    placeholder: "（例）\n・昨日の夜から右のお腹がズキズキ痛い\n・熱は37.8度で、少し吐き気がある\n・歩くと響くような痛みがある\n・普段、高血圧の薬を飲んでいる",
+    recommend: "関連する診療科の例（参考）",
+    headers: { cc: "主訴", history: "現病歴", symptoms: "随伴症状", background: "既往歴・服薬" },
+    disclaimer: "※本結果はAIによる自動生成であり、医師による診断ではありません。参考情報としてご利用いただき、必ず医療機関を受診してください。",
+    login: "ログイン", logout: "ログアウト", history: "履歴",
+    adTitle: "ご家族の安心のために",
+    public: "家族に公開中", private: "自分のみ (非公開)"
+  },
+  en: { 
+    label: "English", button: "Create Medical Summary", loading: "AI is organizing your symptoms...", 
+    copy: "Copy", copied: "Copied", share: "Share", pdf: "Save as PDF", explanationTitle: "Note for you",
+    guideTitle: "How to use this tool?",
+    step1: "Describe your symptoms below. You can also use voice input.",
+    step2: "Tap 'Create Medical Summary'.",
+    step3: "Show the summary to your doctor.",
+    settings: { 
+      title: "Settings", lang: "Language", appearance: "Appearance", 
+      fontSize: "Font Size", theme: "Theme", pdfSize: "PDF Size",
+      family: "Family Settings", profile: "Profile Settings", account: "Account",
+      fontLabels: { s: "Small", m: "Medium", l: "Large" },
+      themeLabels: { light: "Light", dark: "Dark" }
+    },
+    placeholder: "(Ex) I have a throbbing pain in my right stomach since last night...",
+    recommend: "Related Departments (Ref)",
+    headers: { cc: "Chief Complaint", history: "History of Present Illness", symptoms: "Associated Symptoms", background: "Past History / Medication" },
+    disclaimer: "* This is AI-generated text, not a medical diagnosis. Please consult a doctor.",
+    login: "Login", logout: "Logout", history: "History",
+    adTitle: "Recommended Services",
+    public: "Shared with Family", private: "Private (Only Me)"
+  },
+  // 他言語省略
+};
+
+type LangKey = keyof typeof DICT;
+type Theme = 'light' | 'dark';
+type FontSize = 'small' | 'medium' | 'large';
+type PdfSize = 'A4' | 'B5' | 'Receipt';
+
+interface AnalysisResult {
+  summary: { chief_complaint: string; history: string; symptoms: string; background: string; }; 
+  departments?: string[]; explanation?: string; id?: string;
+}
+
+// --- サブコンポーネント ---
+const FormattedText = ({ text }: { text: string }) => {
+  if (!text) return null;
+  return (
+    <p className="whitespace-pre-wrap leading-relaxed">
+      {text.split(/(\*\*.*?\*\*)/).map((part, j) => {
+        if (part.startsWith('**') && part.endsWith('**')) return <strong key={j} className="text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/30 px-1 rounded">{part.slice(2, -2)}</strong>;
+        return part;
+      })}
+    </p>
+  );
+};
+
+const SummarySection = ({ title, content }: { title: string, content: string }) => (
+  <div className="mb-6 last:mb-0 group">
+    <h4 className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+      <span className="w-1 h-4 bg-teal-500 rounded-full"></span>{title}
+    </h4>
+    <div className="pl-3 border-l-2 border-slate-100 dark:border-slate-800 group-hover:border-teal-100 transition-colors">
+      <FormattedText text={content} />
+    </div>
+  </div>
+);
+
+// AdCarouselは NativeAds に置き換わったため削除
+// const AdCarousel = ...
+
+// ==========================================
+// ★メインアプリ (MainApp)
+// ==========================================
+const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
+  const [lang, setLang] = useState<LangKey>("ja");
+  const [theme, setTheme] = useState<Theme>('light');
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
+  const [pdfSize, setPdfSize] = useState<PdfSize>('A4');
+  
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  
+  const recognitionRef = useRef<any>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const t = DICT[lang as LangKey] || DICT.ja;
+
+  const getTextSizeClass = () => {
+    switch(fontSize) { case 'small': return 'text-sm'; case 'large': return 'text-xl'; default: return 'text-base'; }
+  };
+
+  const cardClass = `rounded-2xl shadow-sm border p-6 mb-8 transition-all duration-300 relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`;
+
+  const handleAnalyze = async () => {
+    if (!inputText.trim()) return;
+    setIsLoading(true); setResult(null); setSaveStatus(null); setIsPrivate(false); setCurrentRecordId(null);
+    if (isRecording) { recognitionRef.current?.stop(); setIsRecording(false); }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/analyze`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: inputText, language: t.label }),
+      });
+      if (!response.ok) throw new Error("API Error");
+      const data: AnalysisResult = await response.json();
+      setResult(data);
+
+      if (user && !isGuest) {
+        const { data: inserted, error } = await supabase.from('summaries').insert({
+          user_id: user.id,
+          content: JSON.stringify(data.summary),
+          departments: JSON.stringify(data.departments || []),
+          is_private: false
+        }).select('id').single();
+        if (error) setSaveStatus("保存失敗");
+        else if (inserted) { setSaveStatus("履歴に保存済"); setCurrentRecordId(inserted.id); }
+      }
+    } catch (error) { alert("エラーが発生しました。"); } 
+    finally { setIsLoading(false); }
+  };
+
+  const togglePrivacy = async () => {
+    if (!currentRecordId || !user) return;
+    const newStatus = !isPrivate;
+    setIsPrivate(newStatus);
+    const { error } = await supabase.from('summaries').update({ is_private: newStatus }).eq('id', currentRecordId);
+    if (error) { alert("更新失敗"); setIsPrivate(!newStatus); }
+  };
+
+  // 音声入力
+  const toggleRecording = useCallback(() => {
+    if (isRecording) { recognitionRef.current?.stop(); setIsRecording(false); return; }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("音声入力未対応ブラウザです"); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP'; 
+    recognition.interimResults = true; recognition.continuous = true;
+    recognition.onresult = (event: any) => {
+      let final = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) { if (event.results[i].isFinal) final += event.results[i][0].transcript; }
+      if (final) setInputText(prev => prev + (prev ? '\n' : '') + final);
+    };
+    recognition.start(); setIsRecording(true); recognitionRef.current = recognition;
+  }, [isRecording]);
+
+  // PDF & Copy (省略なし)
+  const handleDownloadPDF = async () => {
+    if (!result) return;
+    try {
+      const h = DICT.ja.headers;
+      const fullText = `■ ${h.cc}\n${result.summary.chief_complaint}\n\n■ ${h.history}\n${result.summary.history}\n\n■ ${h.symptoms}\n${result.summary.symptoms}\n\n■ ${h.background}\n${result.summary.background}`;
+      const res = await fetch(`${BACKEND_URL}/pdf`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: fullText, pdf_size: pdfSize }) });
+      if (!res.ok) throw new Error("PDF Error");
+      const blob = await res.blob(); const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `summary.pdf`; document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { alert("PDF作成エラー"); }
+  };
+  const handleCopy = () => {
+    if (!result) return;
+    const h = DICT.ja.headers;
+    const txt = `【${h.cc}】${result.summary.chief_complaint}\n...`.replace(/\*\*/g, ""); // 簡略化
+    navigator.clipboard.writeText(txt); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const containerClass = `min-h-screen font-sans transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`;
+  
+  return (
+    <div className={containerClass}>
+      {/* Header */}
+      <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
+        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {/* ★変更点: ロゴ画像を使用 */}
+            <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+            
+            {/* ★変更点: サブタイトル変更 */}
+            <h1 className="text-lg font-bold tracking-tight font-mono text-slate-800">
+              Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Medical Summary Assistant</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {isGuest ? (
+              <Link href="/login" className="text-sm font-bold text-teal-600 border border-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition">ログインして保存</Link>
+            ) : (
+              <Link href="/history" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition text-slate-500"><History size={20} /></Link>
+            )}
+            <div className="relative" ref={settingsRef}>
+              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition"><Settings size={20} /></button>
+              {isSettingsOpen && (
+                <div className={`absolute right-0 mt-2 w-72 rounded-xl shadow-xl border py-2 z-50 animate-fade-in ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                   {!isGuest && (
+                     <>
+                       <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">{t.settings.account}</div>
+                       <Link href="/profile" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 flex items-center gap-2"><User size={14}/> {t.settings.profile}</Link>
+                       <Link href="/family" className="block w-full px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 flex items-center gap-2"><Users size={14}/> {t.settings.family}</Link>
+                       <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-red-500 flex items-center gap-2"><LogOut size={14}/> {t.logout}</button>
+                       <div className="border-t my-2 border-slate-100 dark:border-slate-800"></div>
+                     </>
+                   )}
+                   <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><Type size={12}/> {t.settings.fontSize}</div>
+                   <div className="flex bg-slate-100 dark:bg-slate-800 rounded mx-4 p-1 mb-2">
+                      {['s','m','l'].map(size => (
+                        // @ts-ignore
+                        <button key={size} onClick={() => setFontSize(size === 's' ? 'small' : size === 'm' ? 'medium' : 'large')} className="flex-1 py-1 text-xs rounded hover:bg-white shadow-sm">{t.settings.fontLabels[size]}</button>
+                      ))}
+                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-3xl mx-auto px-4 py-8">
+        {!result && (
+          <div className="mb-8 text-center animate-fade-in">
+            <h2 className="text-2xl font-bold mb-2">医師への「伝え方」をサポート</h2>
+            <p className="text-slate-500 text-sm">AIがあなたの症状を整理・言語化します。</p>
+            <div className="grid grid-cols-3 gap-4 mt-6 text-xs text-slate-500">
+              <div className="flex flex-col items-center gap-2"><div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-teal-600"><Mic size={18} /></div><p>{t.step1}</p></div>
+              <div className="flex flex-col items-center gap-2"><div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-teal-600"><Activity size={18} /></div><p>{t.step2}</p></div>
+              <div className="flex flex-col items-center gap-2"><div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-teal-600"><FileText size={18} /></div><p>{t.step3}</p></div>
+            </div>
+          </div>
+        )}
+
+        {/* Input Area */}
+        <div className={`${cardClass} transition-all ${result ? 'border-teal-500/30 ring-1 ring-teal-500/30' : ''}`}>
+          <textarea className={`w-full h-40 bg-transparent resize-none outline-none leading-relaxed placeholder:text-slate-300 dark:placeholder:text-slate-700 ${getTextSizeClass()}`} placeholder={t.placeholder} value={inputText} onChange={(e) => setInputText(e.target.value)} />
+          <div className="flex items-center justify-between mt-4">
+            <button onClick={toggleRecording} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${isRecording ? 'bg-red-50 text-red-600 ring-2 ring-red-500' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {isRecording ? <><MicOff size={16} className="animate-pulse" /> 録音中...</> : <><Mic size={16} /> 音声入力</>}
+            </button>
+            <button onClick={handleAnalyze} disabled={isLoading || !inputText} className={`px-6 py-2 rounded-full font-bold text-white shadow-lg shadow-teal-600/20 transition-all flex items-center gap-2 ${isLoading || !inputText ? "bg-slate-300 cursor-not-allowed" : "bg-teal-600 hover:bg-teal-700"}`}>
+              {isLoading ? t.loading : <>{t.button} <Stethoscope size={18} /></>}
+            </button>
+          </div>
+        </div>
+
+        {/* Result Area */}
+        {result && (
+          <div className="animate-fade-in space-y-6">
+            {saveStatus && (
+              <div className="flex items-center justify-between bg-teal-50 p-3 rounded-lg border border-teal-100">
+                <div className="flex items-center gap-2 text-xs font-bold text-teal-600"><Check size={14} /> {saveStatus}</div>
+                {user && !isGuest && currentRecordId && (
+                  <button onClick={togglePrivacy} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition ${isPrivate ? 'bg-slate-200 text-slate-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {isPrivate ? <Lock size={12}/> : <Eye size={12}/>} {isPrivate ? t.private : t.public}
+                  </button>
+                )}
+              </div>
+            )}
+            {/* サマリーカード */}
+            <div className={`rounded-2xl overflow-hidden border shadow-lg ${theme === 'dark' ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-teal-900/5'}`}>
+              <div className="bg-gradient-to-r from-teal-600 to-teal-700 p-4 text-white flex items-center justify-between">
+                <h3 className="font-bold flex items-center gap-2"><FileText size={18}/> 医師提示用メモ</h3>
+                <div className="flex gap-2">
+                  <button onClick={handleCopy} className="p-2 hover:bg-white/20 rounded-lg transition" title={t.copy}>{isCopied ? <Check size={18}/> : <Copy size={18}/>}</button>
+                  <button onClick={handleDownloadPDF} className="p-2 hover:bg-white/20 rounded-lg transition" title={t.pdf}><Share2 size={18}/></button>
+                </div>
+              </div>
+              <div className={`p-6 sm:p-8 ${getTextSizeClass()}`}>
+                {/* 診療科 */}
+                {result.departments && <div className="flex flex-wrap gap-2 mb-6">{result.departments.map((dept, i) => <span key={i} className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">{dept}</span>)}</div>}
+                {/* 項目 */}
+                <SummarySection title={DICT.ja.headers.cc} content={result.summary.chief_complaint} />
+                <SummarySection title={DICT.ja.headers.history} content={result.summary.history} />
+                <SummarySection title={DICT.ja.headers.symptoms} content={result.summary.symptoms} />
+                <SummarySection title={DICT.ja.headers.background} content={result.summary.background} />
+                {/* 免責 */}
+                <div className="mt-8 p-4 bg-amber-50 border border-amber-100 rounded-lg flex gap-3 text-xs text-amber-800"><ShieldAlert size={24} className="flex-shrink-0" /><p>{t.disclaimer}</p></div>
+              </div>
+            </div>
+            {/* Native Ads (Replaced) */}
+            <NativeAds />
+          </div>
+        )}
+      </main>
+      <footer className="py-8 text-center text-xs text-slate-400">
+        <div className="flex justify-center gap-6 mb-2">
+          <Link href="/terms" className="hover:text-teal-600 transition">利用規約</Link>
+          <Link href="/privacy" className="hover:text-teal-600 transition">プライバシーポリシー</Link>
+          <Link href="/contact" className="hover:text-teal-600 transition">お問い合わせ</Link>
+          <Link href="/about" className="hover:text-teal-600 transition">開発者について</Link>
+        </div>
+        <p>© 2025 Karutto.</p>
+      </footer>
+    </div>
+  );
+};
+
+// ==========================================
+// ★ランディングページ (LandingPage)
+// ==========================================
+const LandingPage = ({ onTry }: { onTry: () => void }) => {
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {/* ★変更点: ロゴ画像を使用 */}
+            <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+            {/* ★変更点: サブタイトル変更 */}
+            <span className="text-xl font-bold font-mono tracking-tight text-slate-800">Karutto</span>
+          </div>
+          <div className="flex gap-4">
+            <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-teal-600 transition py-2">ログイン</Link>
+            <button onClick={onTry} className="bg-teal-600 text-white text-sm font-bold px-4 py-2 rounded-full hover:bg-teal-700 transition shadow-lg shadow-teal-200">今すぐ試す</button>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        {/* Hero Section */}
+        <section className="pt-20 pb-16 px-6 text-center max-w-4xl mx-auto">
+          <span className="inline-block py-1 px-3 rounded-full bg-teal-50 text-teal-700 text-xs font-bold mb-6 border border-teal-100">AI Medical Summary Assistant</span>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 leading-tight mb-6">
+            医師に伝えるべきことを、<br/>
+            <span className="text-teal-600">AIが整理</span>します。
+          </h1>
+          <p className="text-lg text-slate-500 mb-10 max-w-2xl mx-auto leading-relaxed">
+            症状をうまく説明できない、伝え忘れが心配。<br/>
+            カルット（Karutto）は、そんな患者さんとご家族のための、<br/>通院サポートアプリです。
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button onClick={onTry} className="bg-teal-600 text-white font-bold py-4 px-8 rounded-full text-lg hover:bg-teal-700 transition shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2">
+              登録なしで試してみる <ArrowRight size={20}/>
+            </button>
+            <Link href="/about" className="bg-white text-slate-600 font-bold py-4 px-8 rounded-full text-lg border border-slate-200 hover:bg-slate-50 transition flex items-center justify-center">
+              詳しく見る
+            </Link>
+          </div>
+        </section>
+
+        {/* Feature Cards */}
+        <section className="py-16 px-6 bg-white border-t border-slate-100">
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-lg transition">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center mb-4"><Mic size={24}/></div>
+              <h3 className="font-bold text-lg mb-2">音声で話すだけ</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">難しい医療用語は不要です。「いつから痛いか」などを話しかけるだけで、AIが自動で整理します。</p>
+            </div>
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-lg transition">
+              <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center mb-4"><ShieldCheck size={24}/></div>
+              <h3 className="font-bold text-lg mb-2">家族で見守り</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">作成したサマリーは家族グループで共有。離れて暮らす親御さんの通院状況も把握できます。</p>
+            </div>
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-lg transition">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center mb-4"><FileText size={24}/></div>
+              <h3 className="font-bold text-lg mb-2">医師に見せるだけ</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">整理された画面を医師に見せるか、PDFで印刷して持参するだけ。伝え忘れを防ぎます。</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Trust Section */}
+        <section className="py-12 px-6 text-center">
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">TRUSTED & SECURE</p>
+          <div className="flex flex-wrap justify-center gap-4 text-sm font-bold text-slate-500">
+            <span className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border shadow-sm"><ShieldCheck size={16} className="text-teal-600"/> 個人情報は保護</span>
+            <span className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border shadow-sm"><Heart size={16} className="text-rose-500"/> 家族の安心</span>
+            <span className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border shadow-sm"><Activity size={16} className="text-blue-500"/> 診療効率アップ</span>
+          </div>
+        </section>
+      </main>
+
+      <footer className="bg-slate-900 text-slate-400 py-12 px-6">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="font-mono font-bold text-xl text-white">Karutto</div>
+          <div className="flex gap-6 text-sm font-bold">
+            <Link href="/terms" className="hover:text-white transition">利用規約</Link>
+            <Link href="/privacy" className="hover:text-white transition">プライバシーポリシー</Link>
+            <Link href="/contact" className="hover:text-white transition">お問い合わせ</Link>
+            <Link href="/about" className="hover:text-white transition">開発者について</Link>
+          </div>
+          <p className="text-xs text-slate-600">© 2025 Karutto. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+// ==========================================
+// ★エントリーポイント (Page)
+// ==========================================
 export default function Page() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [showApp, setShowApp] = useState(false);
-  
-  // App Logic States
-  const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [textInput, setTextInput] = useState("");
-  const [processing, setProcessing] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'voice' | 'text'>('voice');
-  const [showPrivacySettings, setShowPrivacySettings] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false); // デフォルトは家族に公開
+  const [showApp, setShowApp] = useState(false); // LPから「試す」を押したかどうかのフラグ
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  // Auth Check
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -48,431 +447,13 @@ export default function Page() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Recording Functions
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-      };
-
-      mediaRecorder.start();
-      setRecording(true);
-      setError(null);
-    } catch (err) {
-      setError("マイクへのアクセスが許可されていません。設定をご確認ください。");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-      // Stop all tracks
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  // Submit to AI
-  const handleSubmit = async () => {
-    if (!audioBlob && !textInput.trim()) {
-      setError("音声またはテキストを入力してください");
-      return;
-    }
-
-    setProcessing(true);
-    setError(null);
-
-    const formData = new FormData();
-    if (user) {
-      formData.append('user_id', user.id);
-      formData.append('is_private', isPrivate.toString()); // プライバシー設定送信
-    }
-    
-    if (mode === 'voice' && audioBlob) {
-      formData.append('file', audioBlob, 'recording.webm');
-    } else {
-      formData.append('text_input', textInput);
-    }
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/process`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error('処理に失敗しました');
-      
-      const data = await res.json();
-      setResult(data);
-    } catch (err: any) {
-      setError(err.message || "予期せぬエラーが発生しました");
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleReset = () => {
-    setResult(null);
-    setAudioBlob(null);
-    setTextInput("");
-    setRecording(false);
-  };
-
-  const handleDownloadPDF = async () => {
-    if (!result) return;
-    try {
-      // 簡易的なPDFダウンロードロジック (Backend依存)
-      window.open(`${BACKEND_URL}/api/pdf/${result.id}`, '_blank');
-    } catch (e) {
-      alert("ダウンロードに失敗しました");
-    }
-  };
-
-  if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
-    </div>
-  );
-
-  // ---------------------------------------------------------
-  // LP (Landing Page) View - 未ログイン or アプリ未起動
-  // ---------------------------------------------------------
-  if (!user && !showApp) {
-    return (
-      <div className="min-h-screen bg-white font-sans text-slate-900">
-        {/* Header */}
-        <header className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
-          <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold">K</div>
-              <span className="font-bold text-xl tracking-tight text-slate-800">Karutto</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-teal-600 transition">ログイン</Link>
-              <button 
-                onClick={() => setShowApp(true)}
-                className="bg-slate-900 text-white px-5 py-2.5 rounded-full text-sm font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-900/20"
-              >
-                無料で始める
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Hero Section */}
-        <section className="pt-32 pb-20 px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-1.5 rounded-full text-xs font-bold mb-6 border border-teal-100">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
-              </span>
-              AIが医療用語をわかりやすく整理
-            </div>
-            <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-6 tracking-tight leading-tight">
-              医師に<span className="text-teal-600">正しく伝わる</span>。<br/>
-              家族で<span className="text-teal-600">見守れる</span>。
-            </h1>
-            <p className="text-slate-500 text-lg mb-10 leading-relaxed max-w-2xl mx-auto">
-              高齢のご家族の通院、症状をうまく説明できていますか？<br/>
-              Karutto（カルット）は、話すだけで症状を医療サマリーに変換。<br/>
-              「伝え忘れ」を防ぎ、医師とのコミュニケーションを円滑にします。
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button onClick={() => setShowApp(true)} className="w-full sm:w-auto px-8 py-4 bg-teal-600 text-white rounded-xl font-bold text-lg hover:bg-teal-700 transition shadow-xl shadow-teal-600/20 flex items-center justify-center gap-2">
-                <Mic size={20} /> 今すぐ試す (登録不要)
-              </button>
-              <Link href="/about" className="w-full sm:w-auto px-8 py-4 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold text-lg hover:bg-slate-50 transition flex items-center justify-center gap-2">
-                <FileText size={20} /> 詳しく見る
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Features Grid */}
-        <section className="py-20 bg-slate-50 border-t border-slate-200">
-          <div className="max-w-5xl mx-auto px-4">
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                { icon: <Mic className="text-teal-600" />, title: "話すだけで記録", desc: "難しい操作は不要。症状を話すだけで、AIが医学的な文章に整理します。" },
-                { icon: <FileText className="text-blue-600" />, title: "医師への提示用画面", desc: "スマホを見せるだけでOK。医師が一目で理解できるフォーマットで表示。" },
-                { icon: <Users className="text-rose-600" />, title: "家族で共有", desc: "離れて暮らす家族ともリアルタイムで通院記録を共有。見守りに最適です。" }
-              ].map((f, i) => (
-                <div key={i} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mb-6">{f.icon}</div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-3">{f.title}</h3>
-                  <p className="text-slate-500 leading-relaxed text-sm">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="bg-slate-900 text-slate-400 py-12 px-4">
-          <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-sm">© 2025 Karutto. All rights reserved.</div>
-            <div className="flex gap-6 text-sm font-bold">
-              <Link href="/terms" className="hover:text-white transition">利用規約</Link>
-              <Link href="/privacy" className="hover:text-white transition">プライバシーポリシー</Link>
-              <Link href="/contact" className="hover:text-white transition">お問い合わせ</Link>
-            </div>
-          </div>
-        </footer>
-      </div>
-    );
+  // ログイン済み、または「試す」を押した場合はアプリ画面へ
+  if (user || showApp) {
+    return <MainApp user={user} isGuest={!user} />;
   }
 
-  // ---------------------------------------------------------
-  // App View - ツール本体
-  // ---------------------------------------------------------
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
-        <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2" onClick={() => { handleReset(); setShowApp(false); }}>
-            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold cursor-pointer">K</div>
-            <span className="font-bold text-lg tracking-tight text-slate-800 hidden sm:block">Karutto</span>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {!user ? (
-              <Link href="/login" className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-full hover:bg-slate-800 transition">
-                ログイン / 保存
-              </Link>
-            ) : (
-              <div className="flex gap-2">
-                <Link href="/history" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition relative group">
-                  <History size={22} />
-                  <span className="absolute top-10 right-0 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">履歴</span>
-                </Link>
-                <Link href="/family" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition relative group">
-                  <Users size={22} />
-                  <span className="absolute top-10 right-0 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">家族</span>
-                </Link>
-                <Link href="/profile" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition relative group">
-                  <User size={22} />
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto px-4 py-6">
-        
-        {/* Result View */}
-        {result ? (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mb-6">
-              <div className="bg-teal-600 p-4 text-white flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Stethoscope size={20} />
-                  <span className="font-bold">生成結果</span>
-                </div>
-                <div className="text-xs bg-teal-700 px-2 py-1 rounded border border-teal-500">
-                  医師提示用
-                </div>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-xs font-bold text-slate-400 uppercase">受信診療科（推定）</span>
-                  <div className="font-bold text-teal-700 text-lg mt-1">{result.departments || "一般内科"}</div>
-                </div>
-
-                <div>
-                  <h3 className="text-xs font-bold text-teal-600 uppercase mb-1 flex items-center gap-1">
-                    <Activity size={14} /> 主訴
-                  </h3>
-                  <p className="text-slate-800 font-bold text-lg leading-relaxed">{result.chief_complaint}</p>
-                </div>
-                
-                <div className="border-t border-slate-100"></div>
-
-                <div>
-                  <h3 className="text-xs font-bold text-teal-600 uppercase mb-1">現病歴</h3>
-                  <p className="text-slate-600 leading-relaxed">{result.history}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-xs font-bold text-teal-600 uppercase mb-1">随伴症状</h3>
-                  <p className="text-slate-600 leading-relaxed">{result.symptoms}</p>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 border-t border-slate-200 flex gap-3">
-                <button 
-                   onClick={handleDownloadPDF}
-                   className="flex-1 bg-teal-600 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-teal-700 transition shadow-lg shadow-teal-600/20"
-                >
-                  <FileText size={18} /> PDF保存
-                </button>
-                <button onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(result, null, 2));
-                  alert("コピーしました");
-                }} className="p-3 bg-white border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition">
-                  <Copy size={20} />
-                </button>
-              </div>
-            </div>
-
-            {/* ★ ここにネイティブ広告を配置 ★ */}
-            <NativeAds />
-
-            <button onClick={handleReset} className="w-full py-4 text-slate-500 font-bold hover:text-slate-800 transition">
-              ← 新しく作成する
-            </button>
-          </div>
-        ) : (
-          /* Input View */
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">今日はどうされましたか？</h2>
-              <p className="text-slate-500 text-sm">症状を詳しく話すか、入力してください。<br/>AIが医師に伝わる言葉に整理します。</p>
-            </div>
-
-            {/* Mode Toggle */}
-            <div className="bg-slate-200 p-1 rounded-xl flex mb-6">
-              <button 
-                onClick={() => setMode('voice')}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition ${mode === 'voice' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
-              >
-                <Mic size={16} /> 音声入力
-              </button>
-              <button 
-                onClick={() => setMode('text')}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition ${mode === 'text' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500'}`}
-              >
-                <Type size={16} /> テキスト
-              </button>
-            </div>
-
-            {mode === 'voice' ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <button 
-                  onClick={recording ? stopRecording : startRecording}
-                  className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${recording ? 'bg-rose-500 shadow-rose-500/50 shadow-2xl scale-110' : 'bg-teal-600 shadow-teal-600/30 shadow-xl hover:scale-105'}`}
-                >
-                  {recording ? (
-                    <div className="w-8 h-8 bg-white rounded-sm animate-pulse" />
-                  ) : (
-                    <Mic className="w-10 h-10 text-white" />
-                  )}
-                  {/* Recording Ring Animation */}
-                  {recording && (
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75 animate-ping"></span>
-                  )}
-                </button>
-                <p className={`mt-6 font-bold ${recording ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`}>
-                  {recording ? "録音中... もう一度タップして終了" : "タップして録音開始"}
-                </p>
-                {audioBlob && !recording && (
-                  <div className="mt-4 flex items-center gap-2 text-teal-600 bg-teal-50 px-4 py-2 rounded-full text-sm font-bold">
-                    <Check size={16} /> 録音完了
-                  </div>
-                )}
-              </div>
-            ) : (
-              <textarea
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="例：昨日の夜から38度の熱があり、喉が痛いです。食欲もありません..."
-                className="w-full h-48 p-4 bg-white border border-slate-300 rounded-2xl focus:ring-2 focus:ring-teal-500 outline-none resize-none shadow-sm text-base leading-relaxed"
-              ></textarea>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div className="bg-rose-50 text-rose-600 p-4 rounded-xl text-sm font-bold flex items-center gap-2 border border-rose-100">
-                <ShieldAlert size={18} /> {error}
-              </div>
-            )}
-
-            {/* Privacy Settings (Toggle) */}
-            {user && (
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <button 
-                  onClick={() => setShowPrivacySettings(!showPrivacySettings)}
-                  className="w-full flex justify-between items-center text-sm font-bold text-slate-600"
-                >
-                  <span className="flex items-center gap-2">
-                    {isPrivate ? <Lock size={16} className="text-rose-500"/> : <Users size={16} className="text-teal-500"/>}
-                    公開設定: <span className={isPrivate ? "text-rose-500" : "text-teal-600"}>{isPrivate ? "自分のみ" : "家族と共有"}</span>
-                  </span>
-                  <Settings size={16} className="text-slate-400" />
-                </button>
-                
-                {showPrivacySettings && (
-                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                    <button 
-                      onClick={() => setIsPrivate(false)}
-                      className={`w-full p-3 rounded-lg flex items-center gap-3 text-sm font-bold border ${!isPrivate ? 'bg-teal-50 border-teal-200 text-teal-700' : 'border-transparent hover:bg-slate-50 text-slate-500'}`}
-                    >
-                      <Users size={18} />
-                      <div className="text-left">
-                        <div>家族と共有</div>
-                        <div className="text-[10px] font-normal opacity-80">家族グループのメンバーが閲覧できます</div>
-                      </div>
-                      {!isPrivate && <Check size={16} className="ml-auto" />}
-                    </button>
-                    <button 
-                      onClick={() => setIsPrivate(true)}
-                      className={`w-full p-3 rounded-lg flex items-center gap-3 text-sm font-bold border ${isPrivate ? 'bg-rose-50 border-rose-200 text-rose-700' : 'border-transparent hover:bg-slate-50 text-slate-500'}`}
-                    >
-                      <Lock size={18} />
-                      <div className="text-left">
-                        <div>自分のみ（非公開）</div>
-                        <div className="text-[10px] font-normal opacity-80">自分以外のメンバーには表示されません</div>
-                      </div>
-                      {isPrivate && <Check size={16} className="ml-auto" />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <button
-              onClick={handleSubmit}
-              disabled={processing || (!audioBlob && !textInput.trim())}
-              className={`w-full py-4 rounded-xl font-bold text-white shadow-xl transition-all flex items-center justify-center gap-2
-                ${processing || (!audioBlob && !textInput.trim()) 
-                  ? 'bg-slate-300 cursor-not-allowed shadow-none' 
-                  : 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20'}`}
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  AIが分析中...
-                </>
-              ) : (
-                <>
-                  サマリーを作成する <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-
-            {!user && (
-              <p className="text-center text-xs text-slate-400 mt-4">
-                ※ログインしていない場合、履歴は保存されません。<br/>
-                <Link href="/login" className="text-teal-600 underline">ログインはこちら</Link>
-              </p>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
+  // それ以外はLPを表示
+  return <LandingPage onTry={() => setShowApp(true)} />;
 }
