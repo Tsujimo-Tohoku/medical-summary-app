@@ -44,7 +44,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
-# Supabase Admin Client (for Webhook updates)
+# Supabase Admin Client
 supabase: Client = None
 if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -53,7 +53,7 @@ else:
 
 app = FastAPI()
 
-# CORS: フロントエンドのURLを許可
+# CORS
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 allow_origins = [FRONTEND_URL, "https://medical-summary-app.vercel.app", "https://karteno.jp"]
 
@@ -65,7 +65,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# フォント読み込み (IPAexGothic)
+# Font Loading
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     font_path = os.path.join(current_dir, "ipaexg.ttf")
@@ -76,7 +76,19 @@ try:
 except Exception as e:
     print(f"Font Load Error: {e}")
 
-# --- AI Settings (Tuned for Medical Accuracy) ---
+# --- ★ Plan Configuration (拡張性の鍵) ---
+# StripeのPrice IDと、アプリ内のプラン識別子をここで紐付ける。
+# 新しいプランを作ったら、ここに追加するだけでOK。
+# 環境変数で管理しても良いが、コード管理の方が視認性が高い場合もある。
+PLAN_MAPPING = {
+    # 本番用 (環境変数から読み込むのがベストだが、例として記述)
+    os.getenv("STRIPE_PRICE_ID_PRO", "price_dummy_pro"): "pro_monthly",
+    os.getenv("STRIPE_PRICE_ID_FAMILY", "price_dummy_family"): "family_monthly",
+    # 将来の拡張例:
+    # "price_premium_annual_id": "premium_annual",
+}
+
+# --- AI Settings ---
 system_instruction = """
 あなたは救急・総合診療の経験豊富な「医療秘書AI」です。
 患者（ユーザー）の入力した症状から、医師が診断に必要な情報（OPQRST、既往歴、リスク因子）を抽出し、
@@ -113,25 +125,22 @@ class UserRequest(BaseModel):
     pdf_size: str = "A4"
 
 class CheckoutRequest(BaseModel):
-    price_id: str # Stripe Dashboardで作ったPrice ID
-    user_id: str  # Supabase User ID
+    price_id: str 
+    user_id: str
     cancel_url: str = f"{FRONTEND_URL}/plans" 
 
-# --- AI & PDF Endpoints ---
+# --- Endpoints ---
 
 @app.post("/analyze")
 async def analyze_symptoms(request: UserRequest):
     try:
         safe_text = mask_pii(request.text)
-        
-        # 多言語対応の指示
         explanation_instruction = ""
         if request.language not in ["Japanese", "日本語", "ja"]:
              explanation_instruction = f"- `explanation`: ユーザーへの説明を{request.language}で記述（AIの理解を伝えるため）。"
         else:
              explanation_instruction = "- `explanation`: 空文字（\"\"）にしてください。"
 
-        # ★ プロンプトのチューニング (陰性所見と時系列の強化)
         prompt = f"""
         以下の患者の訴えを分析し、以下のJSONフォーマットのみを出力してください。
         Markdown記号（###など）は含めないでください。純粋なJSON文字列のみを返してください。
@@ -233,7 +242,7 @@ async def create_pdf(request: UserRequest):
         print(f"PDF Error: {e}")
         raise HTTPException(status_code=500, detail="PDF generation failed.")
 
-# --- Stripe Payment Endpoints ---
+# --- Stripe Payment Endpoints (Updated) ---
 
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: CheckoutRequest):
@@ -244,11 +253,19 @@ async def create_checkout_session(request: CheckoutRequest):
         if not STRIPE_SECRET_KEY:
             raise HTTPException(status_code=500, detail="Stripe config missing")
 
+        # ★ Price IDからプランタイプを特定し、Metadataに埋め込む
+        # これにより、Webhook側でロジックを変える必要がなくなる
+        plan_type = PLAN_MAPPING.get(request.price_id, "unknown_plan")
+        
+        # もし未知のPrice IDが来たら、デフォルトかエラーにする（ここでは安全のためそのまま通すがログ出す）
+        if plan_type == "unknown_plan":
+            print(f"Warning: Unknown Price ID received: {request.price_id}")
+
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[
                 {
-                    'price': request.price_id, # フロントエンドから送られてきたPrice ID
+                    'price': request.price_id, 
                     'quantity': 1,
                 },
             ],
@@ -258,6 +275,7 @@ async def create_checkout_session(request: CheckoutRequest):
             client_reference_id=request.user_id,
             metadata={
                 "user_id": request.user_id,
+                "plan_type": plan_type  # ★ ここに動的にプラン名を入れる
             }
         )
         return {"url": checkout_session.url}
@@ -268,19 +286,13 @@ async def create_checkout_session(request: CheckoutRequest):
 
 @app.post("/webhook")
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
-    """
-    Stripeからの通知を受け取り、Supabaseのユーザー情報を更新する
-    """
     payload = await request.body()
-
     try:
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, STRIPE_WEBHOOK_SECRET
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
-        raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
@@ -294,18 +306,20 @@ async def handle_checkout_completed(session):
     """
     user_id = session.get("client_reference_id")
     customer_id = session.get("customer")
+    # ★ Metadataからプラン情報を取り出す（動的）
+    metadata = session.get("metadata", {})
+    plan_type = metadata.get("plan_type", "free") 
     
     if not user_id or not supabase:
         print("Webhook Warning: No user_id or Supabase client.")
         return
 
-    # ユーザーをProプランに更新
     try:
         supabase.table("profiles").update({
             "stripe_customer_id": customer_id,
             "subscription_status": "active",
-            "plan_type": "pro_monthly"
+            "plan_type": plan_type # ★ データベースにはMetadataの値をそのまま保存
         }).eq("id", user_id).execute()
-        print(f"User {user_id} upgraded to Pro.")
+        print(f"User {user_id} upgraded to {plan_type}.")
     except Exception as e:
         print(f"Supabase Update Error: {e}")
