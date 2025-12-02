@@ -18,7 +18,7 @@ type LinkProps = any; // エラー回避用
 
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
-  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, FilePlus, User,
+  LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, User,
   Eye, Lock, Utensils, HeartPulse, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Heart
 } from 'lucide-react';
 
@@ -254,8 +254,13 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
       <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg"><FilePlus size={18} /></div>
-            <h1 className="text-lg font-bold tracking-tight font-mono">Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Smart Medical Summary</span></h1>
+            {/* ★変更点: ロゴ画像を使用 */}
+            <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+            
+            {/* ★変更点: サブタイトル変更 */}
+            <h1 className="text-lg font-bold tracking-tight font-mono text-slate-800">
+              Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Medical Summary Assistant</span>
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             {isGuest ? (
@@ -381,7 +386,9 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white"><FilePlus size={18} /></div>
+            {/* ★変更点: ロゴ画像を使用 */}
+            <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+            {/* ★変更点: サブタイトル変更 */}
             <span className="text-xl font-bold font-mono tracking-tight text-slate-800">Karutto</span>
           </div>
           <div className="flex gap-4">

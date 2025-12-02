@@ -1,14 +1,7 @@
-# Python系
-.venv/
+node_modules/
+.next/
+.env*.local
+.vercel
 __pycache__/
-*.py[cod]
-.env
-
-# Node.js系 (Frontend)
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/build/
-
-# その他
+.venv/
 .DS_Store
