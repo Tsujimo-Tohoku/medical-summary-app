@@ -36,17 +36,17 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-if not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY is not set.")
-
-# Initialize Clients
-genai.configure(api_key=GEMINI_API_KEY)
-
 # Stripe Config
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 else:
     print("WARNING: STRIPE_SECRET_KEY is not set.")
+
+# Initialize Clients
+if not GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY is not set.")
+else:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # Supabase Admin Client
 supabase: Client = None
@@ -60,7 +60,7 @@ else:
 
 app = FastAPI()
 
-# CORS: フロントエンドのURLを許可
+# CORS
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 allow_origins = [FRONTEND_URL, "https://medical-summary-app.vercel.app", "https://karteno.jp"]
 
@@ -72,7 +72,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# フォント読み込み (IPAexGothic)
+# Font Loading
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     font_path = os.path.join(current_dir, "ipaexg.ttf")
@@ -83,13 +83,24 @@ try:
 except Exception as e:
     print(f"Font Load Error: {e}")
 
-# --- Plan Configuration ---
-PLAN_MAPPING = {
-    os.getenv("STRIPE_PRICE_ID_PRO", "price_dummy_pro"): "pro_monthly",
-    os.getenv("STRIPE_PRICE_ID_FAMILY", "price_dummy_family"): "family_monthly",
+# --- ★ Plan Configuration (Secure & Scalable) ---
+# 環境変数からPrice IDを読み込む
+PRICE_ID_PRO = os.getenv("STRIPE_PRICE_ID_PRO")
+PRICE_ID_FAMILY = os.getenv("STRIPE_PRICE_ID_FAMILY")
+
+# フロントエンドからのリクエスト(key)をPrice IDに変換するマップ
+PLAN_KEY_TO_ID = {
+    "pro_monthly": PRICE_ID_PRO,
+    "family_monthly": PRICE_ID_FAMILY,
 }
 
-# --- AI Settings (Tuned) ---
+# Webhook用: Price IDからプラン名を逆引きするマップ
+PLAN_ID_TO_KEY = {
+    PRICE_ID_PRO: "pro_monthly",
+    PRICE_ID_FAMILY: "family_monthly",
+}
+
+# --- AI Settings ---
 system_instruction = """
 あなたは救急・総合診療の経験豊富な「医療秘書AI」です。
 患者（ユーザー）の入力した症状から、医師が診断に必要な情報（OPQRST、既往歴、リスク因子）を抽出し、
@@ -126,11 +137,11 @@ class UserRequest(BaseModel):
     pdf_size: str = "A4"
 
 class CheckoutRequest(BaseModel):
-    price_id: str 
+    plan_key: str # 'pro_monthly' or 'family_monthly' (IDではなくキーを受け取る)
     user_id: str
     cancel_url: str = f"{FRONTEND_URL}/plans" 
 
-# --- Endpoints ---
+# --- AI & PDF Endpoints ---
 
 @app.post("/analyze")
 async def analyze_symptoms(request: UserRequest):
@@ -243,26 +254,31 @@ async def create_pdf(request: UserRequest):
         print(f"PDF Error: {e}")
         raise HTTPException(status_code=500, detail="PDF generation failed.")
 
-# --- Stripe Payment Endpoints (Updated) ---
+# --- Stripe Payment Endpoints (Updated for Security) ---
 
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: CheckoutRequest):
     """
     Stripeの決済画面URLを発行する
+    ★ フロントからは 'plan_key' (例: pro_monthly) を受け取り、
+       サーバー側で環境変数からPrice IDを解決する安全な実装
     """
     try:
         if not STRIPE_SECRET_KEY:
             raise HTTPException(status_code=500, detail="Stripe config missing")
 
-        plan_type = PLAN_MAPPING.get(request.price_id, "unknown_plan")
-        if plan_type == "unknown_plan":
-            print(f"Warning: Unknown Price ID received: {request.price_id}")
+        # 1. プランキーに対応するPrice IDを環境変数から取得
+        target_price_id = PLAN_KEY_TO_ID.get(request.plan_key)
+        
+        if not target_price_id:
+            raise HTTPException(status_code=400, detail="Invalid plan key or Price ID not configured")
 
+        # 2. セッション作成
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[
                 {
-                    'price': request.price_id, 
+                    'price': target_price_id, 
                     'quantity': 1,
                 },
             ],
@@ -272,7 +288,7 @@ async def create_checkout_session(request: CheckoutRequest):
             client_reference_id=request.user_id,
             metadata={
                 "user_id": request.user_id,
-                "plan_type": plan_type
+                "plan_type": request.plan_key # わかりやすいキーを保存
             }
         )
         return {"url": checkout_session.url}
@@ -298,10 +314,15 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 async def handle_checkout_completed(session):
+    """
+    決済成功時のロジック: Supabaseのユーザー情報を更新
+    """
     user_id = session.get("client_reference_id")
     customer_id = session.get("customer")
+    
+    # Metadataからプラン情報を取得（create_checkout_sessionで埋め込んだもの）
     metadata = session.get("metadata", {})
-    plan_type = metadata.get("plan_type", "free") 
+    plan_type = metadata.get("plan_type", "free")
     
     if not user_id or not supabase:
         print("Webhook Warning: No user_id or Supabase client.")
