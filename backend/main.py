@@ -36,17 +36,16 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-# Stripe Config
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-else:
-    print("WARNING: STRIPE_SECRET_KEY is not set.")
-
 # Initialize Clients
 if not GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY is not set.")
 else:
     genai.configure(api_key=GEMINI_API_KEY)
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+else:
+    print("WARNING: STRIPE_SECRET_KEY is not set.")
 
 # Supabase Admin Client
 supabase: Client = None
@@ -94,12 +93,6 @@ PLAN_KEY_TO_ID = {
     "family_monthly": PRICE_ID_FAMILY,
 }
 
-# Webhook用: Price IDからプラン名を逆引きするマップ
-PLAN_ID_TO_KEY = {
-    PRICE_ID_PRO: "pro_monthly",
-    PRICE_ID_FAMILY: "family_monthly",
-}
-
 # --- AI Settings ---
 system_instruction = """
 あなたは救急・総合診療の経験豊富な「医療秘書AI」です。
@@ -137,7 +130,7 @@ class UserRequest(BaseModel):
     pdf_size: str = "A4"
 
 class CheckoutRequest(BaseModel):
-    plan_key: str # 'pro_monthly' or 'family_monthly' (IDではなくキーを受け取る)
+    plan_key: str # 'pro_monthly' or 'family_monthly'
     user_id: str
     cancel_url: str = f"{FRONTEND_URL}/plans" 
 
@@ -254,7 +247,7 @@ async def create_pdf(request: UserRequest):
         print(f"PDF Error: {e}")
         raise HTTPException(status_code=500, detail="PDF generation failed.")
 
-# --- Stripe Payment Endpoints (Updated for Security) ---
+# --- Stripe Payment Endpoints ---
 
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: CheckoutRequest):
@@ -271,7 +264,9 @@ async def create_checkout_session(request: CheckoutRequest):
         target_price_id = PLAN_KEY_TO_ID.get(request.plan_key)
         
         if not target_price_id:
-            raise HTTPException(status_code=400, detail="Invalid plan key or Price ID not configured")
+            # 開発環境でID未設定の場合のエラーハンドリング
+            print(f"Error: Price ID not found for key: {request.plan_key}")
+            raise HTTPException(status_code=400, detail=f"Price ID configuration error for {request.plan_key}")
 
         # 2. セッション作成
         checkout_session = stripe.checkout.Session.create(
