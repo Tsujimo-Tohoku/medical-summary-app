@@ -1,6 +1,8 @@
 node_modules/
 .next/
-.env*.local
+.env*
+.env
+.env.local
 .vercel
 __pycache__/
 .venv/
