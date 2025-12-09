@@ -90,7 +90,7 @@ const FormattedText = ({ text }: { text: any }) => {
   } else if (typeof text === 'object') {
     safeText = JSON.stringify(text); // オブジェクトならJSON文字にする
   } else {
-    safeText = String(text); // それ以外（数値など）は文字列化
+    safeText = String(text); // 数値などは文字列化
   }
 
   return (
