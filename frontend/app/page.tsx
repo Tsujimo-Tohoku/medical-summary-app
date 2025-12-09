@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 
 // ★ 新しい広告コンポーネントをインポート
@@ -77,12 +77,25 @@ interface AnalysisResult {
   departments?: string[]; explanation?: string; id?: string;
 }
 
-// --- サブコンポーネント ---
-const FormattedText = ({ text }: { text: string }) => {
-  if (!text) return null;
+// --- サブコンポーネント (修正版: AIのゆらぎに対応) ---
+const FormattedText = ({ text }: { text: any }) => {
+  // nullやundefinedなら何もしない
+  if (text === null || text === undefined) return null;
+
+  // ★修正ポイント: 強制的に文字列に変換する
+  // AIが配列 ["A", "B"] を返してきても "A,B" のような文字列として処理できるようにする
+  let safeText = "";
+  if (Array.isArray(text)) {
+    safeText = text.join("\n"); // 配列なら改行でつなぐ
+  } else if (typeof text === 'object') {
+    safeText = JSON.stringify(text); // オブジェクトならJSON文字にする
+  } else {
+    safeText = String(text); // それ以外（数値など）は文字列化
+  }
+
   return (
     <p className="whitespace-pre-wrap leading-relaxed">
-      {text.split(/(\*\*.*?\*\*)/).map((part, j) => {
+      {safeText.split(/(\*\*.*?\*\*)/).map((part, j) => {
         if (part.startsWith('**') && part.endsWith('**')) return <strong key={j} className="text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/30 px-1 rounded">{part.slice(2, -2)}</strong>;
         return part;
       })}
@@ -153,7 +166,7 @@ const PricingPreview = () => (
   </section>
 );
 
-// --- コンサルタント追加: サマリー後の課金訴求バナー ---
+// --- コンサルタント追加: サマリー後の課金導線 (UpgradeCallout) ---
 const UpgradeCallout = () => (
   <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl mb-8 relative overflow-hidden">
     {/* 背景装飾 */}
