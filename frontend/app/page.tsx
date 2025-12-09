@@ -79,20 +79,29 @@ interface AnalysisResult {
 
 // --- サブコンポーネント (修正版: AIのゆらぎに対応) ---
 const FormattedText = ({ text }: { text: any }) => {
-  // nullやundefinedなら何もしない
+  // 1. データが空なら何もしない
   if (text === null || text === undefined) return null;
 
-  // ★修正ポイント: 強制的に文字列に変換する
-  // AIが配列 ["A", "B"] を返してきても "A,B" のような文字列として処理できるようにする
+  // 2. ★デバッグ用: 実際に何が届いているかコンソールに出す
+  // F12キー -> Consoleタブで確認できます
+  console.log("FormattedText received:", text, "Type:", typeof text);
+
+  // 3. 強制的に文字列に変換する（ここが防御壁）
   let safeText = "";
-  if (Array.isArray(text)) {
-    safeText = text.join("\n"); // 配列なら改行でつなぐ
-  } else if (typeof text === 'object') {
-    safeText = JSON.stringify(text); // オブジェクトならJSON文字にする
-  } else {
-    safeText = String(text); // 数値などは文字列化
+  try {
+    if (Array.isArray(text)) {
+      safeText = text.join("\n"); // 配列なら改行でつなぐ
+    } else if (typeof text === 'object') {
+      safeText = JSON.stringify(text).replace(/[\{\}\"]/g, ''); // オブジェクトなら文字化
+    } else {
+      safeText = String(text); // 数値などは文字列化
+    }
+  } catch (e) {
+    console.error("Conversion error:", e);
+    safeText = "データ形式エラー";
   }
 
+  // 4. 文字列として安全に表示
   return (
     <p className="whitespace-pre-wrap leading-relaxed">
       {safeText.split(/(\*\*.*?\*\*)/).map((part, j) => {
