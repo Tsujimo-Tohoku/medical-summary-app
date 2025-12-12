@@ -1,4 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Karutto (Medical Triage Assistant)
+
+> **Note for Judges (Vibe Code Hackathon):**
+> This repository contains the **full-stack implementation** (Next.js + Supabase + Python Backend) that served as the conceptual foundation for my hackathon submission.
+>
+> For the hackathon, I utilized **Google AI Studio** to "Vibe Code" the frontend interface and integrate Gemini 3.0 Pro's reasoning capabilities rapidly.
 
 ## Getting Started
 
