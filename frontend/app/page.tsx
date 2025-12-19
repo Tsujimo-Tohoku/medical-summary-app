@@ -12,7 +12,8 @@ type LinkProps = any; // エラー回避用
 import { 
   Mic, MicOff, Settings, FileText, Share2, Copy, Check, 
   LogOut, History, ShieldAlert, Activity, Stethoscope, Globe, Type, Users, User,
-  Eye, Lock, Utensils, HeartPulse, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Heart
+  Eye, Lock, Utensils, HeartPulse, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Heart,
+  Zap, Star, CheckCircle2
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://medical-backend-92rr.onrender.com";
@@ -76,24 +77,31 @@ interface AnalysisResult {
   departments?: string[]; explanation?: string; id?: string;
 }
 
-// --- [重要修正] FormattedText: AIのゆらぎ（配列やオブジェクト）を強制的に文字に変換 ---
+// --- サブコンポーネント (修正版: AIのゆらぎに対応) ---
 const FormattedText = ({ text }: { text: any }) => {
+  // 1. データが空なら何もしない
   if (text === null || text === undefined) return null;
 
+  // 2. ★デバッグ用: 実際に何が届いているかコンソールに出す
+  // F12キー -> Consoleタブで確認できます
+  console.log("FormattedText received:", text, "Type:", typeof text);
+
+  // 3. 強制的に文字列に変換する（ここが防御壁）
   let safeText = "";
   try {
     if (Array.isArray(text)) {
       safeText = text.join("\n"); // 配列なら改行でつなぐ
     } else if (typeof text === 'object') {
-      safeText = JSON.stringify(text, null, 2).replace(/[\{\}\"]/g, ''); // オブジェクトなら文字化
+      safeText = JSON.stringify(text).replace(/[\{\}\"]/g, ''); // オブジェクトなら文字化
     } else {
       safeText = String(text); // 数値などは文字列化
     }
   } catch (e) {
-    console.error("Format Error:", e);
+    console.error("Conversion error:", e);
     safeText = "データ形式エラー";
   }
 
+  // 4. 文字列として安全に表示
   return (
     <p className="whitespace-pre-wrap leading-relaxed">
       {safeText.split(/(\*\*.*?\*\*)/).map((part, j) => {
@@ -115,7 +123,91 @@ const SummarySection = ({ title, content }: { title: string, content: string }) 
   </div>
 );
 
-// AdCarouselコンポーネントは NativeAds に置き換えたため削除
+// --- コンサルタント追加: プラン比較カード (LP用) ---
+const PricingPreview = () => (
+  <section className="py-16 px-4 bg-slate-50 border-t border-slate-200">
+    <div className="max-w-4xl mx-auto text-center">
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">あなたに合ったプランを</h2>
+      <p className="text-slate-500 text-sm mb-10">必要な機能だけを選んで、賢く使いましょう。</p>
+      
+      <div className="grid md:grid-cols-3 gap-6 text-left">
+        {/* Free */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-slate-500 font-bold text-sm mb-2">フリープラン</div>
+          <div className="text-3xl font-bold text-slate-900 mb-4">¥0</div>
+          <ul className="text-sm text-slate-600 space-y-3 mb-6">
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> AIサマリー生成</li>
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> PDFダウンロード</li>
+            <li className="flex items-center gap-2 text-slate-400"><LogOut size={16}/> 履歴保存期間に制限</li>
+          </ul>
+        </div>
+
+        {/* Standard */}
+        <div className="bg-white p-6 rounded-2xl border-2 border-teal-500 shadow-xl shadow-teal-500/10 relative transform md:-translate-y-2">
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-teal-600 text-white px-3 py-1 rounded-full text-xs font-bold">人気 No.1</div>
+          <div className="text-teal-700 font-bold text-sm mb-2">スタンダード</div>
+          <div className="text-3xl font-bold text-slate-900 mb-4">¥500<span className="text-sm font-normal text-slate-500">/月</span></div>
+          <ul className="text-sm text-slate-600 space-y-3 mb-6">
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> <strong>無制限</strong>に履歴保存</li>
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> 広告非表示で快適</li>
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> 優先サポート</li>
+          </ul>
+        </div>
+
+        {/* Family */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-slate-500 font-bold text-sm mb-2">家族プラン</div>
+          <div className="text-3xl font-bold text-slate-900 mb-4">¥980<span className="text-sm font-normal text-slate-500">/月</span></div>
+          <ul className="text-sm text-slate-600 space-y-3 mb-6">
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> スタンダード全機能</li>
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> <strong>家族とデータ共有</strong></li>
+            <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-teal-500"/> 離れた親御様を見守り</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-10">
+        <Link href="/plans" className="inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-3 px-8 rounded-full hover:bg-slate-800 transition shadow-lg">
+          料金プランの詳細を見る <ArrowRight size={18}/>
+        </Link>
+      </div>
+    </div>
+  </section>
+);
+
+// --- コンサルタント追加: サマリー後の課金導線 (UpgradeCallout) ---
+const UpgradeCallout = () => (
+  <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl mb-8 relative overflow-hidden">
+    {/* 背景装飾 */}
+    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-teal-500 rounded-full opacity-20 blur-xl"></div>
+    
+    <div className="relative z-10">
+      <div className="flex items-center gap-2 mb-3 text-teal-400 font-bold text-sm uppercase tracking-wider">
+        <Star size={16} fill="currentColor" /> Premium Feature
+      </div>
+      <h3 className="text-xl font-bold mb-2">この記録を、ずっと残しませんか？</h3>
+      <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+        スタンダードプランなら、過去の通院履歴を無期限で保存。<br/>
+        「前回いつ、どんな症状だったか」をいつでも振り返れます。
+      </p>
+      
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Link 
+          href="/plans" 
+          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white text-center font-bold py-3 rounded-xl transition shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2"
+        >
+          今すぐアップグレード <Zap size={18}/>
+        </Link>
+        <Link 
+          href="/plans" 
+          className="flex-1 bg-white/10 hover:bg-white/20 text-white text-center font-bold py-3 rounded-xl transition backdrop-blur-sm border border-white/10 flex items-center justify-center gap-2"
+        >
+          プラン詳細を見る <ChevronRight size={18}/>
+        </Link>
+      </div>
+    </div>
+  </div>
+);
 
 // ==========================================
 // ★メインアプリ (MainApp)
@@ -328,7 +420,11 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
               </div>
             </div>
 
-            {/* Native Ads (元々ここにあった AdCarousel を NativeAds に置き換え) */}
+            {/* ★ コンサルタント追加: サマリー生成直後の課金導線 (UpgradeCallout) */}
+            {/* ユーザーの満足度が高いタイミングで「保存・共有」の価値を訴求する */}
+            <UpgradeCallout />
+
+            {/* Native Ads (Replaced) */}
             <NativeAds />
           </div>
         )}
@@ -340,7 +436,7 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
           <Link href="/contact" className="hover:text-teal-600 transition">お問い合わせ</Link>
           <Link href="/about" className="hover:text-teal-600 transition">開発者について</Link>
         </div>
-        <p>© 2025 Karutto. All rights reserved.</p>
+        <p>© 2025 Karutto.</p>
       </footer>
     </div>
   );
@@ -357,11 +453,8 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
           <div className="flex items-center gap-2">
             {/* ★変更点: ロゴ画像を使用 */}
             <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
-            
             {/* ★変更点: サブタイトル変更 */}
-            <h1 className="text-lg font-bold tracking-tight font-mono text-slate-800">
-              Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Medical Summary Assistant</span>
-            </h1>
+            <span className="text-xl font-bold font-mono tracking-tight text-slate-800">Karutto</span>
           </div>
           <div className="flex gap-4">
             <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-teal-600 transition py-2">ログイン</Link>
@@ -412,6 +505,10 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
             </div>
           </div>
         </section>
+
+        {/* ★ コンサルタント追加: プラン比較セクション (PricingPreview) */}
+        {/* 安心感を与えるFeature Cardsの直後に配置し、具体的な選択肢を提示する */}
+        <PricingPreview />
 
         {/* Trust Section */}
         <section className="py-12 px-6 text-center">
