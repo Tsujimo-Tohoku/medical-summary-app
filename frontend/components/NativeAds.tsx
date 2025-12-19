@@ -12,14 +12,13 @@ interface AdItem {
 }
 
 // 広告データ
-// 医療・介護・見守りに特化し、信頼性を損なわない商材を選定
 const AD_ITEMS: AdItem[] = [
   {
     id: 1,
     title: "高齢者見守りサービス",
     description: "離れて暮らす親御様の安全を24時間ガードマンがサポート。緊急時の駆けつけも。",
     icon: <ShieldAlert className="w-6 h-6 text-teal-600" />,
-    url: "https://www.alsok.co.jp/person/silver/", // ※提携後にアフィリエイトリンクへ差し替え
+    url: "https://www.alsok.co.jp/person/silver/", 
     badge: "人気"
   },
   {
@@ -42,7 +41,7 @@ const AD_ITEMS: AdItem[] = [
 export const NativeAds = () => {
   return (
     <div className="w-full mt-8 mb-12">
-      {/* セクション見出し: 広告色を出さず「サポート情報」として提示 */}
+      {/* セクション見出し */}
       <div className="flex items-center gap-2 mb-4 px-1">
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
           Support & Care
@@ -60,7 +59,7 @@ export const NativeAds = () => {
             rel="noopener noreferrer"
             className="group relative block bg-white rounded-xl border border-slate-200 p-4 hover:border-teal-400 hover:shadow-md transition-all duration-300 no-underline"
           >
-            {/* PR表記（控えめに） */}
+            {/* PR表記 */}
             <div className="absolute top-2 right-2 text-[10px] text-slate-300 font-medium px-1 border border-slate-100 rounded">
               PR
             </div>

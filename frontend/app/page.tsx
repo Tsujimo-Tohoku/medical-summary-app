@@ -115,8 +115,6 @@ const SummarySection = ({ title, content }: { title: string, content: string }) 
   </div>
 );
 
-// AdCarouselコンポーネントは NativeAds に置き換えたため削除
-
 // ==========================================
 // ★メインアプリ (MainApp)
 // ==========================================
@@ -328,7 +326,7 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
               </div>
             </div>
 
-            {/* Native Ads (元々ここにあった AdCarousel を NativeAds に置き換え) */}
+            {/* Native Ads (Replaced from AdCarousel) */}
             <NativeAds />
           </div>
         )}
@@ -340,7 +338,7 @@ const MainApp = ({ user, isGuest }: { user: any, isGuest: boolean }) => {
           <Link href="/contact" className="hover:text-teal-600 transition">お問い合わせ</Link>
           <Link href="/about" className="hover:text-teal-600 transition">開発者について</Link>
         </div>
-        <p>© 2025 Karutto. All rights reserved.</p>
+        <p>© 2025 Karutto.</p>
       </footer>
     </div>
   );
@@ -357,11 +355,8 @@ const LandingPage = ({ onTry }: { onTry: () => void }) => {
           <div className="flex items-center gap-2">
             {/* ★変更点: ロゴ画像を使用 */}
             <img src="/icon-192x192.png" alt="Karutto Logo" className="w-8 h-8 rounded-lg shadow-sm" />
-            
             {/* ★変更点: サブタイトル変更 */}
-            <h1 className="text-lg font-bold tracking-tight font-mono text-slate-800">
-              Karutto <span className="text-teal-600 font-sans font-normal text-sm ml-2 hidden sm:inline">Medical Summary Assistant</span>
-            </h1>
+            <span className="text-xl font-bold font-mono tracking-tight text-slate-800">Karutto</span>
           </div>
           <div className="flex gap-4">
             <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-teal-600 transition py-2">ログイン</Link>
